@@ -1,0 +1,19 @@
+{
+  "name": "alex-job-career-command-center",
+  "version": "1.0.0",
+  "description": "Privacy-safe public portfolio edition of a local-first career command center.",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test application-package.test.mjs database-storage.test.mjs filter-logic.test.mjs pdf-download-flow.test.mjs resume-assessment.test.mjs",
+    "audit:public": "node public-release-audit.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "playwright": "^1.55.0"
+  }
+}

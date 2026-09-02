@@ -1,0 +1,21 @@
+{
+  "name": "Alex Job",
+  "short_name": "Alex Job",
+  "description": "Private resume-matched job search, application tracker, and Excel-synchronised dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "categories": ["productivity", "business", "utilities"],
+  "lang": "en",
+  "background_color": "#f4f7fb",
+  "theme_color": "#11233f",
+  "shortcuts": [
+    {"name":"Refresh jobs","short_name":"Refresh","url":"/?action=refresh","icons":[{"src":"/app-icon.svg","sizes":"any","type":"image/svg+xml"}]},
+    {"name":"Application board","short_name":"Board","url":"/?view=board","icons":[{"src":"/app-icon.svg","sizes":"any","type":"image/svg+xml"}]}
+  ],
+  "icons": [
+    {"src":"/app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

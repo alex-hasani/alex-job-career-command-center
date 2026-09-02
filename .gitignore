@@ -1,0 +1,41 @@
+# Dependencies and temporary tooling
+node_modules/
+tmp/
+runtime/
+
+# Local runtime databases, exports, locks, and generated artifacts
+--db
+*.sqlite
+*.sqlite-*
+*.db
+*.xlsx
+*.xls
+*.docx
+*.pdf
+*.writing*
+*.inspect.ndjson
+template-page-*.png
+
+# Private career and mailbox evidence
+gmail-lifecycle-evidence.json
+source-health.json
+job-sources.config.json
+State/
+Applications/
+Backups/
+Logs/
+Evidence_Bank/
+Job_Postings/
+
+# Local credentials and operating-system files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+
+# Logs and coverage
+*.log
+coverage/

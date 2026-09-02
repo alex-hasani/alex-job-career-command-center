@@ -1,0 +1,2812 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,shrink-to-fit=no" />
+    <meta name="theme-color" content="#11233f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="application-name" content="Alex Job" />
+    <meta name="apple-mobile-web-app-title" content="Alex Job" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/app-icon.svg" type="image/svg+xml" />
+    <title>Alex Job</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #11233f;
+        --muted: #66758d;
+        --line: #e2e9f1;
+        --blue: #2864e7;
+        --bluebg: #edf3ff;
+        --green: #087968;
+        --greenbg: #e7f8f3;
+        --amber: #99620c;
+        --amberbg: #fff4dc;
+        --rose: #a44359;
+        --rosebg: #f9e9ed;
+        --canvas: #f4f7fb;
+        --card: #fff;
+        --soft: #f7faff;
+        --input: #fff;
+        --shadow: #18335a12;
+        --focus: #72a2ff;
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --ink: #e8eef8;
+        --muted: #9cafc8;
+        --line: #2b3d55;
+        --blue: #78a5ff;
+        --bluebg: #1b3155;
+        --green: #5ed6bd;
+        --greenbg: #123b36;
+        --amber: #f0bf69;
+        --amberbg: #493719;
+        --rose: #f098ac;
+        --rosebg: #4a2430;
+        --canvas: #0c1421;
+        --card: #142033;
+        --soft: #17263b;
+        --input: #101b2c;
+        --shadow: #00000055;
+        --focus: #8bb4ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font:
+          14px/1.48 Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        transition: background .2s ease, color .2s ease;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button, input, select, textarea { min-height: 42px; }
+      input, select, textarea { background:var(--input); color:var(--ink); border-color:var(--line) !important; }
+      :focus-visible { outline:3px solid color-mix(in srgb, var(--focus) 48%, transparent); outline-offset:2px; }
+      .shell {
+        max-width: 1500px;
+        margin: auto;
+        padding: 28px clamp(16px, 4vw, 56px) 54px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+      }
+      .top-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        min-width: 0;
+      }
+      #installApp {
+        white-space: nowrap;
+      }
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2a66e7, #132f6c);
+        color: #fff;
+        box-shadow: 0 8px 18px #2563eb42;
+      }
+      .muted {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        margin-top: 24px;
+        padding: clamp(25px, 4vw, 44px);
+        border-radius: 24px;
+        background: linear-gradient(116deg, #10213d, #193d79 68%, #2866d8);
+        color: white;
+        box-shadow: 0 18px 42px #10213f28;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #b9d4ff;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      .hero h1 {
+        margin: 0;
+        max-width: 840px;
+        font-size: clamp(27px, 4vw, 44px);
+        line-height: 1.1;
+        letter-spacing: -0.046em;
+      }
+      .hero p:not(.eyebrow) {
+        margin: 12px 0 0;
+        max-width: 760px;
+        color: #dce9ff;
+      }
+      .refresh {
+        border: 0;
+        border-radius: 10px;
+        width: 100%;
+        background: #1c4ba5;
+        color: #fff;
+        padding: 11px 14px;
+        font-weight: 800;
+        cursor: pointer;
+        box-shadow: 0 7px 14px #1c4ba526;
+      }
+      .filter .refresh {
+        margin: 0 0 10px;
+      }
+      .email-sync { margin:0 0 14px; padding:11px; border:1px solid var(--line); border-radius:12px; background:var(--soft); }
+      .email-sync button { width:100%; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); padding:10px 12px; font-weight:800; }
+      .email-sync p { margin:7px 0 0; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+      .email-sync .pending { color:var(--amber); }
+      .email-sync .success { color:var(--green); }
+      .refresh-progress { display:none; margin:0 0 14px; padding:12px; border:1px solid #cbd9f4; border-radius:12px; background:#f6f9ff; }
+      .refresh-progress.active { display:block; }
+      .progress-head, .progress-detail { display:flex; justify-content:space-between; gap:8px; font-size:12px; }
+      .progress-head { margin-bottom:8px; color:var(--ink); font-weight:800; }
+      .progress-detail { margin-top:7px; color:var(--muted); }
+      .progress-track { height:9px; overflow:hidden; border-radius:999px; background:#dfe8f7; }
+      .progress-bar { width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#2864e7,#087968); transition:width .35s ease; }
+      .grid {
+        display: grid;
+        grid-template-columns: 292px minmax(0, 1fr);
+        gap: 22px;
+        margin-top: 22px;
+      }
+      .grid > * { min-width:0; max-width:100%; }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 10px 28px var(--shadow);
+      }
+      .theme-toggle, .view-toggle button, .saved-actions button {
+        border:1px solid var(--line); border-radius:9px; background:var(--soft); color:var(--ink); padding:7px 10px; font-weight:800;
+      }
+      .saved-searches { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-bottom:12px; }
+      .saved-actions { display:flex; gap:6px; }
+      .saved-actions button { min-width:44px; padding:6px 9px; }
+      .view-toggle { display:flex; gap:6px; align-items:center; }
+      .view-toggle button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+      .sync-state { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 14px; }
+      .sync-chip { padding:5px 8px; border-radius:999px; background:var(--greenbg); color:var(--green); font-size:11px; font-weight:800; }
+      .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(250px, 1fr); gap:12px; overflow-x:auto; padding-bottom:8px; scroll-snap-type:x proximity; }
+      .board-column { min-height:260px; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--soft); scroll-snap-align:start; }
+      .board-column h3 { display:flex; justify-content:space-between; margin:0 0 10px; font-size:13px; }
+      .board-card { padding:11px; border:1px solid var(--line); border-radius:11px; background:var(--card); box-shadow:0 5px 14px var(--shadow); }
+      .board-card + .board-card { margin-top:8px; }
+      .board-card h4 { margin:0; font-size:13px; line-height:1.35; }
+      .board-card p { margin:4px 0 8px; color:var(--muted); font-size:11px; }
+      .board-card select { width:100%; font-size:12px; }
+      .board-card .board-note { padding:7px 8px; border-radius:8px; background:var(--soft); overflow-wrap:anywhere; }
+      .board-card .board-actions { display:flex; align-items:center; gap:7px; margin-top:8px; }
+      .board-card .board-review { flex:1; border:1px solid var(--line); border-radius:8px; padding:7px 9px; background:var(--card); color:var(--blue); font-size:11px; font-weight:800; cursor:pointer; }
+      .board-column.status-not-recorded { border-top:4px solid #7f8da3; }
+      .board-column.status-not-applied { border-top:4px solid #4f79c7; }
+      .board-column.status-preparing { border-top:4px solid #b87916; }
+      .board-column.status-applied { border-top:4px solid #2467d1; }
+      .board-column.status-interviewing { border-top:4px solid #7955c8; }
+      .board-column.status-offer { border-top:4px solid #188b62; }
+      .board-column.status-rejected { border-top:4px solid #c8445d; }
+      .board-column.status-withdrawn { border-top:4px solid #a66d3f; }
+      .board-column.status-closed { border-top:4px solid #5e6878; }
+      .weights { margin-top:10px; border:1px solid var(--line); border-radius:10px; background:var(--soft); }
+      .weights summary { padding:9px 10px; cursor:pointer; font-size:12px; font-weight:800; }
+      .weight-grid { display:grid; grid-template-columns:1fr auto; gap:7px 10px; padding:0 10px 10px; align-items:center; font-size:11px; }
+      .weight-grid select { min-width:74px; }
+      .mobile-nav { display:none; }
+      html[data-theme="dark"] .hero { background:linear-gradient(116deg,#111d31,#19345d 68%,#2453a2); }
+      html[data-theme="dark"] .origin, html[data-theme="dark"] .evidence, html[data-theme="dark"] details.jd, html[data-theme="dark"] .detail-grid, html[data-theme="dark"] .site, html[data-theme="dark"] .source-context { background:var(--soft); }
+      html[data-theme="dark"] .application-comment-control, html[data-theme="dark"] .page-nav button { background:var(--input); color:var(--ink); }
+      .filter {
+        height: max-content;
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding: 16px;
+        position: sticky;
+        top: 16px;
+      }
+      .filter::-webkit-scrollbar { width:10px; }
+      .filter::-webkit-scrollbar-thumb { border:3px solid transparent; border-radius:999px; background:color-mix(in srgb,var(--muted) 45%,transparent); background-clip:padding-box; }
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .bar h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .link {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .field {
+        margin: 0 0 9px;
+      }
+      .field label {
+        display: block;
+        margin: 0 0 4px;
+        color: #54647b;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.085em;
+        font-weight: 800;
+      }
+      input,
+      select {
+        width: 100%;
+        height: 36px;
+        border: 1px solid #d9e1ec;
+        border-radius: 9px;
+        padding: 0 10px;
+        background: #fff;
+        color: #263952;
+        outline: 0;
+      }
+      input:focus,
+      select:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px #2864e71d;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .check {
+        display: flex !important;
+        align-items: center;
+        gap: 8px;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        cursor: pointer;
+      }
+      .check input {
+        width: 15px;
+        height: 15px;
+        accent-color: var(--blue);
+      }
+      .filterfoot {
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 11px;
+        margin-bottom: 12px;
+      }
+      .metric {
+        padding: 16px;
+      }
+      .metric span {
+        display: block;
+        color: var(--muted);
+        text-transform: uppercase;
+        font-weight: 800;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+      }
+      .metric b {
+        display: block;
+        margin-top: 4px;
+        font-size: 26px;
+        line-height: 1;
+        letter-spacing: -0.05em;
+      }
+      .metric small {
+        display: block;
+        margin-top: 7px;
+        color: var(--green);
+        font-weight: 700;
+      }
+      .network {
+        padding: 14px 16px;
+        margin-bottom: 18px;
+      }
+      .network > summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      .network > summary::-webkit-details-marker { display: none; }
+      .network > summary::after {
+        content: "Show sources +";
+        flex: 0 0 auto;
+        color: #2c5cac;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .network[open] > summary::after { content: "Hide sources −"; }
+      .networktop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .network h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+      .network p {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sources {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 12px;
+      }
+      .source {
+        padding: 5px 8px;
+        border-radius: 99px;
+        background: #f0f3f7;
+        color: #596a84;
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .source.ok {
+        background: var(--greenbg);
+        color: var(--green);
+      }
+      .source.needs_key {
+        background: var(--amberbg);
+        color: var(--amber);
+      }
+      .source.unavailable {
+        background: var(--rosebg);
+        color: var(--rose);
+      }
+      .source.open_search {
+        background: var(--bluebg);
+        color: #2c5cac;
+      }
+      .search {
+        padding: 17px;
+      }
+      .searchrow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 168px;
+        gap: 10px;
+      }
+      .hint {
+        margin: 11px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sectionhead {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 16px;
+        margin: 21px 0 12px;
+      }
+      .sectionhead h2 {
+        margin: 0;
+        font-size: 19px;
+        letter-spacing: -0.03em;
+      }
+      .sectionhead p {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns:minmax(0,1fr);
+        width:100%;
+        min-width:0;
+        max-width:100%;
+        gap: 11px;
+      }
+      .job {
+        width:100%;
+        min-width:0;
+        max-width:100%;
+        padding: 18px;
+        content-visibility: auto;
+        contain-intrinsic-size: 0 780px;
+      }
+      .job > * { min-width:0; max-width:100%; }
+      .jobtop {
+        display: flex;
+        justify-content: space-between;
+        gap: 13px;
+      }
+      .job h3 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+      .company {
+        margin: 3px 0 0;
+        color: #526681;
+        font-size: 13px;
+      }
+      .open {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 8px;
+        padding: 7px 9px;
+        text-decoration: none;
+        background: var(--bluebg);
+        color: #2457b9;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .jobtop-actions { display:flex; flex:0 0 auto; align-items:stretch; gap:7px; }
+      .share-job { border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--soft); color:var(--blue); font-size:11px; font-weight:800; white-space:nowrap; }
+      .commute { margin-top:12px; border:1px solid var(--line); border-radius:10px; background:var(--soft); overflow:hidden; }
+      .commute summary { cursor:pointer; padding:10px 12px; color:var(--blue); font-size:12px; font-weight:800; }
+      .commute-body { display:grid; gap:10px; padding:0 12px 12px; }
+      .commute-note { margin:0; color:var(--muted); font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
+      .commute-actions { display:flex; flex-wrap:wrap; gap:8px; }
+      .commute-actions a { display:inline-flex; align-items:center; justify-content:center; min-height:38px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--card); color:var(--blue); text-decoration:none; font-size:11px; font-weight:800; }
+      .commute-map { min-height:260px; border-radius:10px; overflow:hidden; background:var(--card); }
+      .commute-map iframe { display:block; width:100%; height:300px; border:0; }
+      .origin {
+        margin: 11px 0 0;
+        padding: 8px 10px;
+        border-left: 3px solid #9cbcff;
+        border-radius: 0 7px 7px 0;
+        background: #f7faff;
+        color: #4e6383;
+        font-size: 12px;
+      }
+      .origin b {
+        color: #274f9b;
+      }
+      .tags,
+      .proof {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 12px;
+      }
+      .tag {
+        padding: 4px 7px;
+        border-radius: 6px;
+        background: #f0f3f7;
+        color: #53657e;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .tag.match {
+        background: var(--greenbg);
+        color: var(--green);
+      }
+      .evidence {
+        margin-top: 12px;
+        padding: 11px 12px;
+        border: 1px solid #e8edf5;
+        border-radius: 10px;
+        background: #fbfcfe;
+      }
+      .evidence b {
+        font-size: 12px;
+      }
+      .evidence p {
+        margin: 4px 0 0;
+        color: #607189;
+        font-size: 12px;
+      }
+      .proof span {
+        padding: 4px 7px;
+        border-radius: 6px;
+        background: var(--greenbg);
+        color: var(--green);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .job-actions {
+        display: grid;
+        grid-template-columns: minmax(220px, auto) minmax(280px, 1fr) auto;
+        align-items: start;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .status-control {
+        display: grid;
+        grid-template-rows: auto 66px;
+        align-items: stretch;
+        gap: 6px;
+        color: #526681;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .status-control select {
+        min-width: 145px;
+        height: 66px;
+        border: 1px solid #ccd7e6;
+        border-radius: 8px;
+        padding: 7px 9px;
+        background: #fff;
+        color: #243b5a;
+      }
+      .comment-control {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px 8px;
+        color: #526681;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .comment-control > span:first-child { grid-column: 1 / -1; }
+      .application-comment-control {
+        width: 100%;
+        min-height: 66px;
+        max-height: 120px;
+        resize: vertical;
+        border: 1px solid #ccd7e6;
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: #fff;
+        color: #243b5a;
+        font: inherit;
+        font-weight: 500;
+      }
+      .save-comment {
+        align-self: stretch;
+        border: 1px solid #b8c8de;
+        border-radius: 8px;
+        padding: 0 12px;
+        background: #eef4ff;
+        color: #2457b9;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .comment-save-state { grid-column: 1 / -1; min-height: 14px; font-size: 11px; font-weight: 600; }
+      .prepare-application { min-height:66px; margin-top:24px; border:0; border-radius:9px; padding:9px 12px; background:linear-gradient(135deg,#2457b9,#183f87); color:#fff; font-weight:800; white-space:nowrap; }
+      .prepare-application[disabled] { opacity:.58; cursor:not-allowed; }
+      .application-studio { position:fixed; inset:0; z-index:120; display:none; place-items:center; padding:12px; overflow:hidden; background:#071426b8; color:var(--ink); backdrop-filter:blur(5px); }
+      .application-studio.open { display:grid; }
+      .studio-shell { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); width:min(820px,100%); min-width:0; max-width:100%; max-height:calc(100dvh - 24px); overflow:hidden; border:1px solid var(--line); border-radius:18px; background:var(--card); box-shadow:0 30px 90px #07172f55; }
+      .studio-shell * { min-width:0; max-width:100%; }
+      .studio-shell :is(h2,p,span,label,b,button,a) { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
+      .studio-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:12px; width:100%; min-width:0; padding:18px 20px; border-bottom:1px solid var(--line); }
+      .studio-head > div { min-width:0; }
+      .studio-head h2 { margin:2px 0 3px; max-width:100%; overflow-wrap:anywhere; font-size:21px; letter-spacing:-.025em; }
+      .studio-head p { margin:0; color:var(--muted); font-size:12px; }
+      .studio-close { min-width:0; max-width:76px; border:1px solid var(--line); border-radius:9px; background:var(--soft); color:var(--ink); padding:7px 11px; font-weight:800; white-space:nowrap; }
+      .studio-body { width:100%; min-width:0; overflow:auto; overflow-x:hidden; padding:18px 20px; }
+      .studio-status { width:100%; margin:0 0 12px; padding:10px 12px; overflow:hidden; border-radius:10px; background:var(--bluebg); color:var(--blue); font-size:12px; font-weight:700; }
+      .studio-status.error { background:var(--rosebg); color:var(--rose); }
+      .studio-start { margin-bottom:14px; }
+      .studio-start button,.jd-fallback button { width:100%; border:0; border-radius:10px; padding:11px 14px; background:#2457b9; color:#fff; font-weight:800; }
+      .letter-choices { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:0 0 12px; }
+      .letter-choices button { width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--soft); color:var(--ink); font-weight:800; }
+      .letter-choices button.active { border-color:#2457b9; background:#2457b9; color:#fff; }
+      .document-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 10px; }
+      .package-regenerate { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 10px; }
+      .document-choices button,.package-regenerate button { width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--soft); color:var(--ink); font-weight:800; }
+      .document-choices button.active,.package-regenerate .primary { border-color:#2457b9; background:#2457b9; color:#fff; }
+      .package-controls { margin-bottom:10px; }
+      .package-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; color:var(--muted); font-size:11px; }
+      .package-meta span { padding:5px 8px; border-radius:999px; background:var(--soft); }
+      .package-diff,.package-history { margin-top:12px; border:1px solid var(--line); border-radius:11px; background:var(--soft); }
+      .package-diff summary,.package-history summary { padding:10px 12px; color:var(--blue); font-weight:800; cursor:pointer; }
+      #packageDiffBody,#packageHistoryBody { padding:0 12px 12px; color:var(--muted); font-size:12px; }
+      #packageDiffBody dl { display:grid; grid-template-columns:minmax(130px,max-content) minmax(0,1fr); gap:7px 12px; margin:0; }
+      #packageDiffBody dt { color:var(--ink); font-weight:800; }
+      #packageDiffBody dd { min-width:0; margin:0; white-space:normal; overflow-wrap:anywhere; word-break:break-word; }
+      .version-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-top:1px solid var(--line); }
+      .version-row:first-child { border-top:0; }
+      .version-row button { border:1px solid var(--line); border-radius:8px; padding:6px 9px; background:var(--card); color:var(--blue); font-weight:800; }
+      .studio-body > * { max-width:100%; }
+      .studio-field { display:block; width:100%; min-width:0; max-width:100%; margin:12px 0 0; color:var(--ink); font-size:12px; font-weight:800; }
+      .studio-field label { display:block; margin:0 0 6px; }
+      .studio-field input { display:block; width:100%; min-width:0; max-width:100%; margin:0; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--surface); color:var(--ink); font:inherit; }
+      .studio-field textarea { display:block; width:100%; min-width:0; max-width:100%; margin:0; padding:12px; border:1px solid var(--line); border-radius:11px; resize:vertical; overflow-x:hidden; white-space:pre-wrap; overflow-wrap:anywhere; font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
+      #coverLetterEditor { min-height:420px; }
+      #jobDescriptionInput { min-height:220px; }
+      .jd-fallback { min-width:0; padding:14px; border:1px solid var(--amber); border-radius:12px; background:var(--amberbg); overflow:hidden; }
+      .jd-fallback p { overflow-wrap:anywhere; }
+      .jd-fallback .fallback-divider { display:flex; align-items:center; gap:10px; margin:14px 0 2px; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; }
+      .jd-fallback .fallback-divider::before,.jd-fallback .fallback-divider::after { content:""; flex:1; border-top:1px solid var(--line); }
+      .jd-fallback .secondary-action { margin-top:8px; background:transparent; color:var(--blue); border:1px solid var(--blue); }
+      #jobDescriptionInput { min-height:220px; }
+      .package-downloads { margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--soft); }
+      .package-downloads h3 { margin:0 0 10px; font-size:13px; }
+      .package-download-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .package-download-grid a,.package-download-grid button { min-width:0; min-height:44px; display:flex; align-items:center; justify-content:center; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--ink); font-size:12px; font-weight:800; line-height:1.25; text-align:center; text-decoration:none; overflow-wrap:anywhere; }
+      .studio-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; min-width:0; gap:8px; margin-top:14px; padding:14px 0 max(2px,env(safe-area-inset-bottom)); overflow:visible; border-top:1px solid var(--line); background:transparent; }
+      .studio-actions button,.studio-actions a { min-width:0; max-width:100%; min-height:42px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px; padding:8px 12px; background:var(--card); color:var(--ink); font-weight:800; text-decoration:none; }
+      .studio-actions .success { grid-column:1 / -1; }
+      .studio-actions .primary { border-color:#2457b9; background:#2457b9; color:#fff; }
+      .studio-actions .success { border-color:var(--green); background:var(--green); color:#fff; }
+      .studio-actions [hidden],.studio-body [hidden] { display:none !important; }
+      .application-timing { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:9px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--soft); color:var(--muted); font-size:11px; }
+      .application-timing b { color:var(--ink); }
+      .status-history { width:100%; }
+      .status-history summary { color:var(--blue); font-weight:800; cursor:pointer; }
+      .status-history ol { margin:8px 0 0; padding-left:20px; }
+      .status-history li + li { margin-top:4px; }
+      @media (max-width: 820px), (max-device-width: 820px) {
+        .strategy-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .job-actions { grid-template-columns: 1fr; align-items: stretch; }
+        .status-control { grid-template-rows:auto 52px; }
+        .status-control select { height:52px; }
+        .prepare-application { margin-top:0; min-height:52px; }
+        .jobtop-actions { flex-direction:column; }
+        .commute-actions { display:grid; grid-template-columns:1fr; }
+        .commute-map iframe { height:260px; }
+        body { padding-bottom:72px; }
+        .mobile-nav { position:fixed; display:grid; grid-template-columns:repeat(4,1fr); left:0; right:0; bottom:0; z-index:50; padding:8px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background:color-mix(in srgb,var(--card) 94%,transparent); border-top:1px solid var(--line); backdrop-filter:blur(14px); }
+        .mobile-nav button { border:0; background:transparent; color:var(--ink); font-size:11px; font-weight:800; }
+        .application-studio { padding:8px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); }
+        .studio-shell { width:100%; height:calc(100dvh - 16px); max-height:calc(100dvh - 16px); border:1px solid var(--line); border-radius:16px; }
+        .studio-head { position:relative; display:block; min-height:112px; padding:18px 92px 16px 18px; }
+        .studio-head h2 { width:100%; margin-right:0; white-space:normal; overflow-wrap:break-word; word-break:normal; font-size:clamp(15px,4.2vw,18px); line-height:1.18; }
+        .studio-head p { white-space:normal; overflow-wrap:anywhere; word-break:break-word; font-size:11px; line-height:1.35; }
+        .studio-close { position:absolute; top:16px; right:16px; width:68px; }
+        .studio-body { padding-left:14px; padding-right:14px; }
+        .studio-actions { grid-template-columns:1fr; padding-left:0; padding-right:0; }
+        .studio-actions button,.studio-actions a { width:100%; }
+        .studio-actions .success { grid-column:auto; }
+        .package-download-grid { grid-template-columns:1fr; }
+        .document-choices { grid-template-columns:1fr; }
+        #packageDiffBody dl { display:block; }
+        #packageDiffBody dt { margin-top:9px; font-size:12px; }
+        #packageDiffBody dt:first-child { margin-top:0; }
+        #packageDiffBody dd { margin-top:2px; font-size:12px; line-height:1.45; }
+        .package-meta span { max-width:100%; overflow-wrap:anywhere; }
+        .document-choices button,.letter-choices button { font-size:12px; line-height:1.25; }
+        #coverLetterEditor { min-height:46dvh; }
+        .package-regenerate { grid-template-columns:1fr; }
+      }
+      .agent-badge {
+        background: #eaf1ff;
+        color: #2457b9;
+      }
+      details.jd {
+        margin-top: 12px;
+        border: 1px solid #e2e9f3;
+        border-radius: 10px;
+        background: #fff;
+      }
+      details.jd summary {
+        cursor: pointer;
+        padding: 10px 12px;
+        color: #274f9b;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .jd-body {
+        padding: 0 12px 12px;
+        color: #526681;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .jd-snapshot { white-space:pre-wrap; overflow-wrap:anywhere; }
+      .assessment-list {
+        margin: 7px 0 0;
+        padding-left: 18px;
+      }
+      .assessment-list li + li { margin-top: 4px; }
+      .comparison-table { display:grid; gap:8px; margin:8px 0 14px; }
+      .comparison-table > div { min-width:0; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--soft); overflow-wrap:anywhere; }
+      .comparison-table span { display:block; color:var(--accent); font-weight:800; margin:4px 0; }
+      .comparison-table p { margin:0; }
+      .strategy-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:12px 0; }
+      .strategy-summary > div { min-width:0; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--soft); }
+      .strategy-summary b { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+      .strategy-summary strong { display:block; margin-top:3px; color:var(--ink); font-size:16px; overflow-wrap:anywhere; }
+      .priority-apply { background:#dff8ed !important; color:#087b58 !important; }
+      .priority-skip { background:#ffe6ea !important; color:#a92e48 !important; }
+      .matrix-meta { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+      .matrix-meta small { padding:3px 6px; border-radius:6px; background:var(--bluebg); color:var(--ink); }
+      .jd-refresh-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+      .jd-refresh-row button { border:1px solid var(--line); border-radius:9px; background:var(--bluebg); color:var(--blue); padding:7px 10px; font:inherit; font-weight:800; cursor:pointer; }
+      .readiness-table-wrap { width:100%; margin:8px 0 14px; overflow-x:auto; border:1px solid var(--line); border-radius:12px; }
+      .readiness-table { width:100%; min-width:720px; border-collapse:collapse; background:var(--surface); font-size:11px; }
+      .readiness-table th,.readiness-table td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+      .readiness-table th { position:sticky; top:0; background:var(--soft); color:var(--ink); }
+      .readiness-table tr:last-child td { border-bottom:0; }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 14px;
+        margin: 10px 0 12px;
+        padding: 10px;
+        border-radius: 8px;
+        background: #f7faff;
+      }
+      .detail-grid span { min-width: 0; overflow-wrap: anywhere; }
+      .detail-grid b { display: block; margin-bottom: 2px; color: #274f9b; }
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        padding-top: 11px;
+        border-top: 1px solid #edf1f5;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .empty {
+        padding: 42px 18px;
+        text-align: center;
+        color: var(--muted);
+      }
+      .empty b {
+        display: block;
+        color: var(--ink);
+        font-size: 16px;
+        margin-bottom: 4px;
+      }
+      .directory {
+        padding: 19px;
+        margin-top: 19px;
+      }
+      .directory > summary { list-style:none; cursor:pointer; }
+      .directory > summary::-webkit-details-marker { display:none; }
+      .directory > summary::after { content:"Open directory +"; flex:0 0 auto; color:var(--blue); font-size:12px; font-weight:800; }
+      .directory[open] > summary::after { content:"Close directory −"; }
+      .directorytools { display:flex; justify-content:flex-end; margin-top:12px; }
+      .directorytop {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 18px;
+      }
+      .directory h2 {
+        margin: 0;
+        font-size: 17px;
+        letter-spacing: -0.025em;
+      }
+      .directory p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .copy {
+        border: 1px solid #cfe0ff;
+        background: var(--bluebg);
+        color: #2757ae;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .sitegrid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 9px;
+        margin-top: 15px;
+      }
+      .site {
+        padding: 12px;
+        border: 1px solid #e3eaf2;
+        border-radius: 10px;
+        background: #fbfcff;
+      }
+      .site b {
+        display: block;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .site span {
+        display: block;
+        margin: 2px 0 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .site a {
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+      .source-split {
+        display: none;
+        grid-template-columns: minmax(240px, 2fr) minmax(0, 8fr);
+        min-height: 710px;
+        margin-top: 22px;
+        overflow: hidden;
+      }
+      .source-split.open {
+        display: grid;
+      }
+      .source-context {
+        min-width: 0;
+        padding: 24px;
+        background: linear-gradient(150deg, #f6f9ff, #fff);
+      }
+      .source-context .eyebrow {
+        margin: 0 0 7px;
+      }
+      .source-context h2 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: -0.04em;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .source-context p {
+        color: var(--muted);
+        line-height: 1.55;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .source-context dl {
+        margin: 22px 0;
+        display: grid;
+        gap: 12px;
+      }
+      .source-context dt {
+        color: #64738a;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.085em;
+        text-transform: uppercase;
+      }
+      .source-context dd {
+        margin: 3px 0 0;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 700;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .source-note {
+        border-radius: 10px;
+        background: #fff4dd;
+        color: #795509;
+        padding: 12px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .source-browser {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 710px;
+        border-left: 1px solid var(--line);
+      }
+      .source-browser-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .source-browser-bar b {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .source-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .source-actions a,
+      .source-actions button {
+        border: 1px solid #cfe0ff;
+        border-radius: 8px;
+        background: var(--bluebg);
+        color: #2757ae;
+        padding: 7px 9px;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 800;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .source-browser iframe {
+        width: 100%;
+        height: 100%;
+        min-height: 656px;
+        border: 0;
+        background: #fff;
+      }
+      .page-nav {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 20;
+        display: grid;
+        gap: 8px;
+      }
+      .page-nav button {
+        min-width: 132px;
+        border: 1px solid #bcd1f4;
+        border-radius: 10px;
+        background: #fff;
+        color: #1c4ba5;
+        padding: 10px 12px;
+        box-shadow: 0 8px 20px #18335a24;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .page-nav button:hover,
+      .page-nav button:focus-visible {
+        border-color: var(--blue);
+        background: var(--bluebg);
+        outline: 0;
+      }
+      .info {
+        padding: 18px;
+        margin-top: 18px;
+      }
+      .info h3 {
+        margin: 0 0 6px;
+        font-size: 14px;
+      }
+      .info p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 1080px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .filter {
+          position: static;
+        }
+        .sitegrid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 920px) {
+        .source-split {
+          grid-template-columns: 1fr;
+        }
+        .source-browser {
+          min-height: 540px;
+          border-top: 1px solid var(--line);
+          border-left: 0;
+        }
+      }
+      @media (max-width: 650px), (max-device-width: 650px) {
+        html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+        body { font-size:14px; overflow-x:hidden; }
+        .shell {
+          width:100%;
+          max-width:100%;
+          padding:14px max(10px,env(safe-area-inset-right)) calc(92px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+          overflow-x:hidden;
+        }
+        .top { flex-wrap:wrap; align-items:flex-start; gap:10px; }
+        .brand { font-size:16px; }
+        .mark { width:34px; height:34px; }
+        .top-actions { margin-left:auto; gap:7px; }
+        .theme-toggle,#installApp { min-height:38px; padding:6px 8px; font-size:11px; }
+        .top .muted {
+          display: none;
+        }
+        .hero {
+          width:100%;
+          grid-template-columns: 1fr;
+          margin-top:14px;
+          padding:20px 18px;
+          border-radius: 18px;
+        }
+        .hero h1 { font-size:clamp(23px,7vw,30px); line-height:1.08; }
+        .hero p:not(.eyebrow) { font-size:13px; }
+        .grid { width:100%; max-width:100%; grid-template-columns:minmax(0,1fr); gap:14px; margin-top:14px; }
+        .grid > section { min-width:0; max-width:100%; overflow:hidden; }
+        .filter { position:static; width:100%; max-width:100%; min-width:0; max-height:calc(100dvh - 92px - env(safe-area-inset-bottom)); overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scrollbar-gutter:stable; padding:14px; }
+        .saved-searches { grid-template-columns:minmax(0,1fr) auto; }
+        .split { grid-template-columns:1fr; gap:0; }
+        input,select,textarea { min-width:0; max-width:100%; font-size:16px; }
+        .field label { font-size:11px; }
+        .check { min-height:42px; }
+        .refresh-progress { padding:10px; }
+        .progress-head,.progress-detail { flex-wrap:wrap; font-size:11px; }
+        .metrics {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+        }
+        .metric {
+          padding: 13px;
+        }
+        .searchrow {
+          grid-template-columns: 1fr;
+        }
+        .jobtop,
+        .directorytop {
+          flex-direction: column;
+        }
+        .sitegrid {
+          grid-template-columns: 1fr;
+        }
+        .source-context {
+          padding: 18px;
+        }
+        .page-nav {
+          right: 12px;
+          bottom:calc(68px + env(safe-area-inset-bottom));
+        }
+        .page-nav button {
+          width:44px;
+          min-width:44px;
+          height:44px;
+          min-height:44px;
+          padding:0;
+          border-radius:50%;
+          font-size:0;
+        }
+        #goTop::before { content:"↑"; font-size:20px; }
+        #goEnd::before { content:"↓"; font-size:20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <div class="brand">
+          <span class="mark">AJ</span>Alex Job
+          <span class="muted">/ flexible IT job search</span>
+        </div>
+        <div class="top-actions">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Change colour theme">◐ Theme</button>
+          <button class="link" id="installApp" type="button">Install app</button>
+          <span class="muted" id="updated">Not refreshed yet</span>
+        </div>
+      </header>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Search your way</p>
+          <h1>
+            Flexible filtering, verified matching, and a transparent source
+            network.
+          </h1>
+          <p>
+            Set the search criteria, then press Refresh live results to rebuild
+            the saved database. Other filters update instantly without contacting
+            job websites. Candidate eligibility is loaded from the private local profile.
+          </p>
+        </div>
+      </section>
+      <div class="grid">
+        <aside class="panel filter">
+          <div class="bar">
+            <h2>Flexible filters</h2>
+            <button class="link" id="clear">Clear all</button>
+          </div>
+          <div class="saved-searches">
+            <select id="savedSearch" aria-label="Saved searches"><option value="">Saved searches</option></select>
+            <div class="saved-actions"><button id="saveSearch" type="button" title="Save current search">＋</button><button id="deleteSearch" type="button" title="Delete selected search">−</button></div>
+          </div>
+          <button class="refresh" id="refresh">Refresh live results</button>
+          <div class="email-sync">
+            <button id="emailSync" type="button">Request Gmail update - past 7 days</button>
+            <p id="emailSyncStatus" aria-live="polite">Uses the connected Codex Gmail access; Gmail credentials are never stored in this app.</p>
+          </div>
+          <div class="refresh-progress" id="refreshProgress" aria-live="polite">
+            <div class="progress-head"><span id="refreshPhase">Preparing refresh</span><span id="refreshPercent">0%</span></div>
+            <div class="progress-track"><div class="progress-bar" id="refreshBar"></div></div>
+            <div class="progress-detail"><span id="refreshSources">Waiting for sources</span><span id="refreshTime">Elapsed 0:00</span></div>
+          </div>
+          <div class="field">
+            <label for="query">Position, skill or Boolean search</label
+            ><input id="query" placeholder="e.g. Azure AND Linux" />
+          </div>
+          <div class="field">
+            <label for="location">Location</label
+            ><select id="location"></select>
+            <small class="muted">City matching is strict. Use the remote preference below when you also want location-independent remote roles.</small>
+          </div>
+          <div class="field">
+            <label for="company">Company</label
+            ><input id="company" placeholder="e.g. Siemens" />
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="sourceSelect">Source</label
+              ><select id="sourceSelect">
+                <option value="">All sources</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="language">Language</label
+              ><select id="language">
+                <option value="">Any</option>
+                <option>English accepted</option>
+                <option>English</option>
+                <option>German / confirm</option>
+                <option>Not stated</option>
+              </select>
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="stream">Result stream</label
+              ><select id="stream">
+                <option value="">All streams</option>
+                <option value="agent">Verified agent results</option>
+                <option value="live">Live discovery</option>
+                <option value="english">English accepted</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="applicationStatus">Application status</label
+              ><select id="applicationStatus">
+                <option value="active" selected>Active applications</option>
+                <option value="">Any application status</option>
+              </select>
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="workType">Work type</label
+              ><select id="workType">
+                <option value="">Any</option>
+                <option>Full-time</option>
+                <option>Contract</option>
+                <option>Part-time</option>
+                <option>Not stated</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="experience">Experience</label
+              ><select id="experience">
+                <option value="">Any</option>
+                <option>Entry level</option>
+                <option>Mid level</option>
+                <option>Senior</option>
+                <option>Lead / Architect</option>
+              </select>
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="salary">Min salary - EUR</label
+              ><input
+                id="salary"
+                type="number"
+                step="5000"
+                placeholder="65000"
+              />
+            </div>
+            <div class="field">
+              <label for="freshness">Posted</label
+              ><select id="freshness">
+                <option value="">Any time</option>
+                <option value="1">Past 24 hours</option>
+                <option value="7">Past week</option>
+                <option value="30">Past month</option>
+                <option value="dated">Date stated</option>
+              </select>
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="model">Work model</label
+              ><select id="model">
+                <option value="">Any model</option>
+                <option value="remote">Remote / hybrid</option>
+                <option value="onsite">On-site / not stated</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="match">Match floor</label
+              ><select id="match">
+                <option value="0">Any match</option>
+                <option value="70">70%+</option>
+                <option value="80">80%+</option>
+                <option value="90">90%+</option>
+              </select>
+            </div>
+          </div>
+          <div class="split">
+            <div class="field">
+              <label for="recommendation">Recommendation</label>
+              <select id="recommendation">
+                <option value="">Any recommendation</option>
+                <option>PRIORITY APPLY</option>
+                <option>APPLY</option>
+                <option>STRATEGIC STRETCH</option>
+                <option>LOW PRIORITY</option>
+                <option>SKIP</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="opportunity">Opportunity floor</label>
+              <select id="opportunity">
+                <option value="0">Any opportunity</option>
+                <option value="60">60%+</option>
+                <option value="70">70%+</option>
+                <option value="80">80%+</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Preferences</label
+            ><label class="check"
+              ><input id="salaryOnly" type="checkbox" /> Salary disclosed
+              only</label
+            ><label class="check"
+              ><input id="applyOnly" type="checkbox" /> Apply link
+              available</label
+            ><label class="check"
+              ><input id="includeRemoteAnywhere" type="checkbox" /> Include
+              location-independent remote roles</label
+            ><label class="check"
+              ><input id="careerChangeOnly" type="checkbox" /> Quereinstieg möglich only</label
+            ><p class="muted">Filters apply instantly to the saved database. Only the refresh button contacts live sources.</p>
+            <details class="weights"><summary>Match weighting</summary><div class="weight-grid" id="weightGrid"></div></details>
+          </div>
+          <div class="filterfoot" id="filterStatus">
+            Refresh to load live roles.
+          </div>
+        </aside>
+        <section>
+          <div class="metrics">
+            <div class="panel metric">
+              <span>Live roles</span><b id="count">-</b
+              ><small>deduplicated</small>
+            </div>
+            <div class="panel metric">
+              <span>Recommended now</span><b id="strongCount">-</b
+              ><small>Priority Apply + Apply</small>
+            </div>
+            <div class="panel metric">
+              <span>Sources online</span><b id="online">-</b
+              ><small>live providers</small>
+            </div>
+            <div class="panel metric">
+              <span>Agent tracker</span><b id="agentCount">0</b
+              ><small>persistent verified leads</small>
+            </div>
+            <div class="panel metric">
+              <span>SQLite records</span><b id="dbCount">0</b><small>local source of truth</small>
+            </div>
+            <div class="panel metric">
+              <span>Excel mirror</span><b id="excelState">—</b><small>automatic synchronisation</small>
+            </div>
+          </div>
+          <details class="panel info" id="outcomeIntelligence"><summary><b>Application outcome intelligence</b></summary><p id="outcomeSummary">Conversion metrics will appear when application outcomes are recorded.</p></details>
+          <div class="sync-state"><span class="sync-chip" id="dbStatus">SQLite starting</span><span class="sync-chip" id="excelStatus">Excel sync pending</span></div>
+          <details class="panel network">
+            <summary class="networktop">
+              <div>
+                <h2>Source availability</h2>
+                <p>
+                  Green: fetched. Amber: needs credentials. Rose: unavailable.
+                  Blue: direct live search.
+                </p>
+              </div>
+              <span class="muted" id="networkSummary"
+                >Refresh to check source status.</span
+              >
+            </summary>
+            <div class="sources" id="sources">
+              <span class="source">Waiting to refresh</span>
+            </div>
+          </details>
+          <section class="panel search">
+            <div class="searchrow">
+              <input
+                id="search"
+                type="search"
+                placeholder="Narrow loaded results instantly..."
+              /><select id="sort">
+                <option value="priority">Sort: application priority</option>
+                <option value="match">Sort: interview fit</option>
+                <option value="newest">Sort: newest</option>
+                <option value="salary">Sort: salary</option>
+                <option value="company">Sort: company</option>
+                <option value="source">Sort: source</option>
+              </select>
+            </div>
+            <p class="hint">
+              Both search fields filter the saved results instantly. The top
+              Boolean search also becomes the query used by Refresh live results.
+            </p>
+          </section>
+          <div class="sectionhead">
+            <div>
+              <h2>Evidence-led opportunities</h2>
+              <p id="subtitle">Refresh to query configured live providers.</p>
+            </div>
+            <div class="view-toggle"><span class="muted" id="resultCount"></span><button id="listView" class="active" type="button">List</button><button id="boardView" type="button">Board</button></div>
+          </div>
+          <div class="cards" id="jobs">
+            <div class="panel empty">
+              <b>Your expanded dashboard is ready.</b>Use Refresh live results
+              to pull current roles.
+            </div>
+          </div>
+          <details class="panel directory">
+            <summary class="directorytop">
+              <div>
+                <h2>Direct source directory</h2>
+                <p>
+                  Browse direct job boards and employer career pages only when needed.
+                </p>
+              </div>
+            </summary>
+            <div class="directorytools">
+              <button class="copy" id="copy">Copy search brief</button>
+            </div>
+            <div class="sitegrid" id="sites"></div>
+          </details>
+          <section class="panel info">
+            <h3>How the filters work</h3>
+            <p>
+              Stuttgart area is the default and includes nearby cities plus
+              remote and hybrid roles. Choose Stuttgart city only or On-site /
+              not stated under Work model when you want to narrow it. Match
+              scores count only skills detected in the job title or description.
+            </p>
+          </section>
+        </section>
+      </div>
+      <section class="panel source-split" id="sourceSplit" hidden>
+        <div class="source-context">
+          <p class="eyebrow">Direct source view</p>
+          <h2 id="sourceTitle">Choose a source</h2>
+          <p id="sourceDescription">
+            The original website opens on the right while this panel keeps your
+            active search context visible.
+          </p>
+          <dl>
+            <div>
+              <dt>Search brief</dt>
+              <dd id="sourceQuery">—</dd>
+            </div>
+            <div>
+              <dt>Location</dt>
+              <dd id="sourceLocation">—</dd>
+            </div>
+          </dl>
+          <div class="source-note">
+            For signing in, use “Open original”. Embedded sites often block
+            third-party login cookies or security checks; this dashboard cannot
+            and does not bypass those protections.
+          </div>
+        </div>
+        <div class="source-browser">
+          <div class="source-browser-bar">
+            <b id="sourceFrameLabel">Website preview</b>
+            <div class="source-actions">
+              <a id="sourceOpen" href="#" target="_blank" rel="noopener"
+                >Open original ↗</a
+              >
+              <button id="closeSource" type="button">Close</button>
+            </div>
+          </div>
+          <iframe
+            id="sourceFrame"
+            title="Selected direct job source"
+            referrerpolicy="strict-origin-when-cross-origin"
+          ></iframe>
+        </div>
+      </section>
+      <section class="application-studio" id="applicationStudio" role="dialog" aria-modal="true" aria-labelledby="studioTitle" hidden>
+        <div class="studio-shell">
+          <header class="studio-head">
+            <div><span class="eyebrow">Application studio</span><h2 id="studioTitle">Job-specific application package</h2><p id="studioCompany">Select a verified role</p></div>
+            <button class="studio-close" id="closeStudio" type="button" aria-label="Close application studio">Close</button>
+          </header>
+          <div class="studio-body">
+            <p class="studio-status" id="studioStatus" aria-live="polite">Ready.</p>
+            <div class="studio-start" id="studioStart"><button id="generateCoverLetter" type="button">Read JD and regenerate full package</button></div>
+            <section class="jd-fallback" id="jdFallback" hidden>
+              <b>Provide the job description</b>
+              <p class="muted">Use either the exact posting link or paste the complete job description. The CV and letters use only verified evidence from your canonical profile and this JD.</p>
+              <div class="studio-field"><label for="postingUrlInput">Exact job posting link</label><input id="postingUrlInput" type="url" inputmode="url" maxlength="2048" autocomplete="url" placeholder="https://company.example/jobs/position"></div>
+              <button class="secondary-action" id="generateFromUrl" type="button">Read this link and regenerate full package</button>
+              <div class="fallback-divider">or</div>
+              <div class="studio-field"><label for="jobDescriptionInput">Job description</label><textarea id="jobDescriptionInput" maxlength="45000" wrap="soft" placeholder="Paste the complete job description here..."></textarea></div>
+              <button class="primary" id="generateFromJd" type="button">Regenerate full package from pasted JD</button>
+            </section>
+            <section class="package-controls" id="packageControls" hidden>
+              <div class="package-regenerate"><button type="button" data-scope="cv">Regenerate CV</button><button type="button" data-scope="coverLetter">Regenerate cover letter</button><button class="primary" type="button" data-scope="full">Regenerate full package</button></div>
+              <div class="package-meta" id="packageMeta"></div>
+            </section>
+            <div class="document-choices" id="documentChoices" hidden><button type="button" data-document-type="cv">CV / Resume</button><button type="button" data-document-type="coverLetter">Cover letter</button><button type="button" data-document-type="remarks">Portal note · Ihre Bemerkungen</button></div>
+            <div class="letter-choices" id="letterChoices" hidden><button type="button" data-language="de">German</button><button type="button" data-language="en">English</button></div>
+            <div class="studio-field" id="letterField" hidden><label id="letterLabel" for="coverLetterEditor">Document</label><textarea id="coverLetterEditor" maxlength="30000" wrap="soft" spellcheck="true"></textarea></div>
+            <details class="package-diff" id="packageDiff" hidden><summary>Why this version was customized</summary><div id="packageDiffBody"></div></details>
+            <details class="package-history" id="packageHistory" hidden><summary>Previous versions</summary><div id="packageHistoryBody"></div></details>
+            <section class="package-downloads" id="packageDownloads" hidden>
+              <h3>Downloads · <span id="packageDownloadLanguage">German</span></h3>
+              <div class="package-download-grid">
+                <a id="downloadCvDocx" href="#">Download CV · Word</a>
+                <button id="downloadCvPdf" type="button">Save CV · PDF</button>
+                <a id="downloadLetterDocx" href="#">Download cover letter · Word</a>
+                <button id="downloadLetterPdf" type="button">Save cover letter · PDF</button>
+              </div>
+            </section>
+            <footer class="studio-actions">
+              <button id="saveCoverLetter" type="button" hidden>Save my edits</button>
+              <button id="copyCoverLetter" type="button" hidden>Copy selected document</button>
+              <button id="printPackageDocument" type="button" hidden>Print selected document</button>
+              <a id="openApplication" href="#" target="_blank" rel="noopener" hidden>Open application page</a>
+              <button class="success" id="confirmSubmitted" type="button" hidden>Confirm submitted</button>
+            </footer>
+          </div>
+        </div>
+      </section>
+      <nav class="page-nav" aria-label="Page navigation">
+        <button id="goTop" type="button">↑ Go to top</button>
+        <button id="goEnd" type="button">↓ Go to end</button>
+      </nav>
+      <nav class="mobile-nav" aria-label="Mobile navigation"><button id="mobileFilters" type="button">Filters</button><button id="mobileResults" type="button">Results</button><button id="mobileBoard" type="button">Board</button><button id="mobileRefresh" type="button">Refresh</button></nav>
+    </main>
+    <script type="module">
+      import { matchesBooleanText, matchesLocation, matchesLanguage, matchesWorkType, matchesSource, matchesExperience } from "./filter-logic.js";
+      const germanyCities = ["Aachen","Backnang","Bad Friedrichshall","Berlin","Bietigheim-Bissingen","Böblingen","Bonn","Bremen","Cologne","Ditzingen","Dortmund","Dresden","Düsseldorf","Essen","Esslingen","Fellbach","Filderstadt","Frankfurt am Main","Göppingen","Hamburg","Hannover","Heidelberg","Heilbronn","Herrenberg","Karlsruhe","Kirchheim unter Teck","Kornwestheim","Leinfelden-Echterdingen","Leipzig","Leonberg","Ludwigsburg","Mannheim","Marbach am Neckar","Metzingen","Munich","Neckarsulm","Nuremberg","Nürtingen","Ostfildern","Pforzheim","Remseck am Neckar","Reutlingen","Schorndorf","Sindelfingen","Stuttgart","Tübingen","Vaihingen an der Enz","Waiblingen","Weinstadt","Wiesbaden","Winnenden"];
+      const chinaCities = ["Beijing","Chengdu","Chongqing","Guangzhou","Hangzhou","Nanjing","Ningbo","Qingdao","Shanghai","Shenzhen","Suzhou","Tianjin","Wuhan","Xiamen","Xi'an"];
+      const cities = [
+        ["", "All locations / Germany"],
+        ["Stuttgart area", "Stuttgart — within 50 km + remote"],
+        ...germanyCities.map(city => [city, city]),
+        ["China major cities", "China — all major cities"],
+        ["Shanghai + hybrid", "Shanghai plus hybrid / remote"],
+        ["Shanghai only", "Shanghai only (on-site / not stated)"],
+        ...chinaCities.map(city => [city, city]),
+      ];
+      const $ = (id) => document.getElementById(id);
+      $("location").innerHTML = `<option value="">All locations / Germany</option>`
+        + `<option value="Stuttgart area">Stuttgart — within 50 km + remote</option>`
+        + `<optgroup label="Germany">${germanyCities.map(city => `<option value="${city}">${city}</option>`).join("")}</optgroup>`
+        + `<optgroup label="China">`
+        + `<option value="China major cities">All major cities</option>`
+        + `<option value="Shanghai + hybrid">Shanghai plus hybrid / remote</option>`
+        + `<option value="Shanghai only">Shanghai only (on-site / not stated)</option>`
+        + chinaCities.map(city => `<option value="${city}">${city}</option>`).join("")
+        + `</optgroup>`;
+      $("location").value = "Stuttgart area";
+      let jobs = [],
+        sites = [],
+        sourceStates = [],
+        savedSearches = [],
+        activeSavedSearchId = "",
+        restoredSavedSearch = false,
+        databaseStats = {},
+        viewMode = localStorage.getItem("alex-jobs-view") || "list",
+         refreshTimer,
+         appVersion = "",
+         appReloading = false,
+         liveDatabaseRevision = 0;
+      const startup = new URLSearchParams(location.search);
+      async function readAppVersion() {
+        const response = await fetch(`/api/app-version?_=${Date.now()}`, { cache:"no-store" });
+        if (!response.ok) throw new Error("Could not verify the dashboard version");
+        return (await response.json()).version || "";
+      }
+      async function forceAppReload(version) {
+        if (appReloading) return;
+        appReloading = true;
+        document.querySelectorAll("button,select,textarea,input").forEach(control => control.disabled = true);
+        const status = document.getElementById("updated");
+        if (status) status.textContent = "A newer dashboard is ready. Reloading safely…";
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration();
+          await registration?.update();
+        } catch {}
+        const target = new URL(location.href);
+        target.searchParams.set("_autorefresh", "1");
+        target.searchParams.set("_appv", version || Date.now());
+        setTimeout(() => location.replace(target), 350);
+      }
+      async function checkAppVersion() {
+        try {
+          const current = await readAppVersion();
+          if (!appVersion) appVersion = current;
+          else if (current && current !== appVersion) await forceAppReload(current);
+        } catch {}
+      }
+      function writeHeaders(extra = {}) { return { "content-type":"application/json", "x-app-version":appVersion, ...extra }; }
+      async function readWriteResponse(response) {
+        const data = await response.json();
+        if (response.status === 409 && data.code === "STALE_CLIENT") {
+          await forceAppReload("");
+          throw new Error("The dashboard changed and is reloading before saving.");
+        }
+        return data;
+      }
+      const lower = (x) => String(x || "").toLowerCase();
+      const escapeHtml = (value) => String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+      const statuses = ["Preparing", "Stashed", "Not recorded", "Interviewing", "Offer", "Withdrawn", "Applied", "Rejected", "Case Closed"];
+      const statusRank = Object.fromEntries(statuses.map((status, index) => [status, index]));
+      const weightFamilies = {
+        infrastructure:["windows","linux","server","active directory","datacentre"],
+        cloud:["azure","cloud","microsoft 365","m365","entra"],
+        virtualisation:["vmware","vsphere","virtualisation","virtualization"],
+        automation:["bash","powershell","ansible","automation"],
+        operations:["l2","l3","support","asset","operations","monitoring"]
+      };
+      let matchWeights = JSON.parse(localStorage.getItem("alex-jobs-weights") || '{"infrastructure":5,"cloud":5,"virtualisation":4,"automation":4,"operations":3}');
+      function setTheme(theme) {
+        const resolved = theme === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : theme;
+        document.documentElement.dataset.theme = resolved;
+        localStorage.setItem("alex-jobs-theme", theme);
+        $("themeToggle").textContent = resolved === "dark" ? "☾ Dark" : "☀ Light";
+        document.querySelector('meta[name="theme-color"]').content = resolved === "dark" ? "#0c1421" : "#11233f";
+      }
+      setTheme(startup.get("theme") || localStorage.getItem("alex-jobs-theme") || "system");
+      $("themeToggle").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+      $("weightGrid").innerHTML = Object.keys(weightFamilies).map(key => `<label for="weight-${key}">${key[0].toUpperCase() + key.slice(1)}</label><select id="weight-${key}" data-weight="${key}">${[0,1,2,3,4,5].map(value => `<option value="${value}"${Number(matchWeights[key]) === value ? " selected" : ""}>${value === 0 ? "Ignore" : value}</option>`).join("")}</select>`).join("");
+      $("weightGrid").addEventListener("change", event => { if (!event.target.dataset.weight) return; matchWeights[event.target.dataset.weight] = Number(event.target.value); localStorage.setItem("alex-jobs-weights", JSON.stringify(matchWeights)); render(); });
+      function weightedMatch(job) {
+        const evidence = lower((job.evidence || []).join(" · "));
+        let possible = 0, matched = 0;
+        for (const [family, skills] of Object.entries(weightFamilies)) {
+          const weight = Number(matchWeights[family]) || 0;
+          possible += weight;
+          if (skills.some(skill => evidence.includes(lower(skill)))) matched += weight;
+        }
+        const base = Number(job.interviewFitScore ?? job.match) || 0;
+        if (!possible) return base;
+        return Math.min(99, Math.round(base * .9 + (matched / possible) * 10));
+      }
+      function applicationStatusOptions() {
+        const select = $("applicationStatus");
+        const current = select.dataset.initialized ? select.value : (viewMode === "board" ? "" : "active");
+        const counts = Object.fromEntries(statuses.map(status => [status, jobs.filter(job => job.applicationStatus === status).length]));
+        select.innerHTML = `<option value="active">Active applications (${jobs.filter(job => job.lifecycleStatus !== "archived" && !["Rejected", "Withdrawn", "Case Closed"].includes(job.applicationStatus)).length})</option><option value="">Any application status (${jobs.length})</option><optgroup label="Actual status">${statuses.map(status => `<option value="${status}">${status} (${counts[status] || 0})</option>`).join("")}</optgroup>`;
+        select.value = [...select.options].some(option => option.value === current) ? current : "active";
+        select.dataset.initialized = "true";
+      }
+      const criteriaFields = ["query","location","company","sourceSelect","language","workType","experience","salary","freshness","model","match","recommendation","opportunity","salaryOnly","applyOnly","includeRemoteAnywhere","careerChangeOnly","stream","applicationStatus","sort","search"];
+      function currentCriteria() {
+        return Object.fromEntries(criteriaFields.map(id => [id, $(id).type === "checkbox" ? $(id).checked : $(id).value]));
+      }
+      function applyCriteria(criteria = {}) {
+        for (const id of criteriaFields) {
+          if (!(id in criteria) || !$(id)) continue;
+          if ($(id).type === "checkbox") $(id).checked = Boolean(criteria[id]); else $(id).value = criteria[id];
+        }
+        render();
+      }
+      function renderSavedSearches() {
+        const current = $("savedSearch").value;
+        $("savedSearch").innerHTML = '<option value="">Saved searches</option>' + savedSearches.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
+        if (savedSearches.some(item => item.id === current)) $("savedSearch").value = current;
+      }
+      $("savedSearch").onchange = async () => {
+        const selected = savedSearches.find(item => item.id === $("savedSearch").value);
+        activeSavedSearchId = selected?.id || "";
+        if (selected) applyCriteria(selected.criteria);
+        try {
+          const response = await fetch("/api/saved-searches/active", { method:"POST", headers:writeHeaders(), body:JSON.stringify({ id:activeSavedSearchId }) });
+          await readWriteResponse(response);
+        } catch {}
+      };
+      $("saveSearch").onclick = async () => {
+        const name = prompt("Name this saved search:", $("query").value.trim() || "Stuttgart infrastructure roles");
+        if (!name?.trim()) return;
+        const response = await fetch("/api/saved-searches", { method:"POST", headers:writeHeaders(), body:JSON.stringify({ name:name.trim(), criteria:currentCriteria() }) });
+        const data = await readWriteResponse(response);
+        if (!response.ok) return alert(data.error || "Could not save the search");
+        savedSearches = data.searches || [];
+        activeSavedSearchId = data.activeSavedSearchId || data.search.id;
+        renderSavedSearches();
+        $("savedSearch").value = activeSavedSearchId;
+      };
+      $("deleteSearch").onclick = async () => {
+        const id = $("savedSearch").value;
+        if (!id) return;
+        const response = await fetch(`/api/saved-searches?id=${encodeURIComponent(id)}`, { method:"DELETE", headers:{ "x-app-version":appVersion } });
+        const data = await readWriteResponse(response);
+        if (!response.ok) return alert(data.error || "Could not delete the search");
+        savedSearches = data.searches || [];
+        activeSavedSearchId = data.activeSavedSearchId || "";
+        renderSavedSearches();
+      };
+      let installPrompt = null;
+      window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        installPrompt = event;
+      });
+      $("installApp").onclick = async () => {
+        if (installPrompt) {
+          installPrompt.prompt();
+          await installPrompt.userChoice;
+          installPrompt = null;
+          return;
+        }
+        const isiPhone = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        alert(isiPhone
+          ? "In Safari, tap Share, then Add to Home Screen, then Add. Keep Tailscale connected when opening the app away from your desktop network."
+          : "Use your browser menu and choose Install app or Create shortcut. On iPhone, open this page in Safari and use Share > Add to Home Screen.");
+      };
+      if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+        navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+      }
+      setInterval(checkAppVersion, 15000);
+      window.addEventListener("focus", checkAppVersion);
+      window.addEventListener("pageshow", checkAppVersion);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) checkAppVersion(); });
+      function money(n) {
+        return n
+          ? new Intl.NumberFormat("en-DE", {
+              style: "currency",
+              currency: "EUR",
+              maximumFractionDigits: 0,
+            }).format(n)
+          : "Salary not stated";
+      }
+      function formatDateTime(value, fallback = "Not recorded") {
+        if (!value) return fallback;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString("en-GB", { dateStyle:"medium", timeStyle:"short" });
+      }
+      function brief() {
+        return (
+          $("query").value.trim() ||
+          "Senior System Administrator | Windows & Linux | VMware vSphere | Azure | Microsoft 365 | Active Directory | Bash & Ansible"
+        );
+      }
+      function host(url) {
+        try {
+          return new URL(url).hostname.replace(/^www\./, "");
+        } catch {
+          return "Source website";
+        }
+      }
+      const postingText = value => lower(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+      const postingCity = job => postingText(job.location).split(/\s+/).find(part => !["remote","hybrid","germany","deutschland"].includes(part)) || "";
+      function samePosting(a, b) {
+        if (!a || !b) return false;
+        return postingText(a.company) === postingText(b.company)
+          && postingText(a.title) === postingText(b.title)
+          && (!postingCity(a) || !postingCity(b) || postingCity(a) === postingCity(b));
+      }
+      function postingQuality(job) {
+        return (job.url ? 1000 : 0)
+          + (String(job.description || job.jdSnapshot || "").length >= 500 ? 300 : 0)
+          + (job.applicationStatusChangedAt ? 180 : 0)
+          + (job.verified ? 80 : 0)
+          + (job.posted ? 20 : 0);
+      }
+      function applicationTarget(job) {
+        return jobs.filter(candidate => candidate.url && samePosting(job, candidate))
+          .sort((a, b) => postingQuality(b) - postingQuality(a))[0] || job;
+      }
+      function applicationUrl(job) {
+        const target = applicationTarget(job);
+        return target.url || `https://www.google.com/search?q=${encodeURIComponent(`${job.company} ${job.title} careers apply`)}`;
+      }
+      function consolidateDisplayRows(rows) {
+        const grouped = new Map();
+        for (const job of rows) {
+          const key = `${postingText(job.company)}|${postingText(job.title)}|${postingCity(job)}`;
+          const existing = grouped.get(key);
+          if (!existing) { grouped.set(key, job); continue; }
+          const winner = postingQuality(job) > postingQuality(existing) ? job : existing;
+          const other = winner === job ? existing : job;
+          grouped.set(key, { ...winner, sources:[...new Set([...(winner.sources || [winner.source]), ...(other.sources || [other.source])].filter(Boolean))] });
+        }
+        return [...grouped.values()];
+      }
+      function newestTimestamp(job) {
+        for (const value of [job.posted, job.foundAt, job.lastSeenAt, job.applicationStatusChangedAt]) {
+          const timestamp = Date.parse(value || "");
+          if (Number.isFinite(timestamp)) return timestamp;
+        }
+        return 0;
+      }
+      function sourceOptions() {
+        const current = $("sourceSelect").value,
+          live = sourceStates.map((s) => ({
+            name: s.source,
+            status: s.status,
+          })),
+          actual = jobs.flatMap((j) => (j.sources || [j.source]).filter(Boolean).map(name => ({ name, status: "results" }))),
+          direct = sites.map((s) => ({
+            name: s.name,
+            status: s.status || "open_search",
+          })),
+          all = [...live, ...actual, ...direct].filter(
+            (x, i, a) => a.findIndex((y) => y.name === x.name) === i,
+          );
+        $("sourceSelect").innerHTML =
+          '<option value="">All sources</option>' +
+          all
+            .map(
+              (s) =>
+                `<option value="${escapeHtml(s.name)}"${s.name === current ? " selected" : ""}>${escapeHtml(s.name)} (${s.status === "open_search" ? "direct" : s.status})</option>`,
+            )
+            .join("");
+      }
+      function renderSites() {
+        const orderedSites = [...sites].sort((a, b) =>
+          (a.priority === "english-first" ? 0 : a.priority === "secondary" ? 2 : 1) -
+            (b.priority === "english-first" ? 0 : b.priority === "secondary" ? 2 : 1) ||
+          String(a.name).localeCompare(String(b.name))
+        );
+        $("sites").innerHTML = orderedSites.length
+          ? orderedSites
+              .map(
+                (s) =>
+                  `<article class="site"><b title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</b><span>${escapeHtml(s.kind)}${s.languageFocus ? ` · ${escapeHtml(s.languageFocus)}` : ""}${s.provenance === "Gmail" ? " · discovered in Gmail" : ""}${s.lastSeenAt ? ` · last seen ${new Date(s.lastSeenAt).toLocaleDateString("en-GB")}` : ""} · ${s.availability === "available" ? "reachable" : s.availability === "access_restricted" ? "browser access" : s.availability === "unavailable" ? "health check failed" : "not checked"}</span><a class="embed-source" data-site-name="${escapeHtml(s.name)}" href="${escapeHtml(s.url)}">Open in split view ↗</a></article>`,
+              )
+              .join("")
+          : '<span class="muted">Refresh to load the source directory.</span>';
+      }
+      function openDirectSource(link) {
+        const name = link.dataset.siteName || "Selected source";
+        const panel = $("sourceSplit");
+        $("sourceTitle").textContent = name;
+        $("sourceFrameLabel").textContent = name;
+        $("sourceDescription").textContent =
+          `Viewing ${name} beside your current dashboard search.`;
+        $("sourceQuery").textContent = brief();
+        $("sourceLocation").textContent =
+          $("location").selectedOptions[0]?.textContent || "All locations / Germany";
+        $("sourceOpen").href = link.href;
+        $("sourceFrame").src = link.href;
+        panel.hidden = false;
+        panel.classList.add("open");
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      $("sites").addEventListener("click", (event) => {
+        const link = event.target.closest(".embed-source");
+        if (!link) return;
+        event.preventDefault();
+        openDirectSource(link);
+      });
+      $("closeSource").addEventListener("click", () => {
+        $("sourceFrame").src = "about:blank";
+        $("sourceSplit").classList.remove("open");
+        $("sourceSplit").hidden = true;
+      });
+      $("goTop").addEventListener("click", () =>
+        window.scrollTo({ top: 0, behavior: "smooth" }),
+      );
+      $("goEnd").addEventListener("click", () =>
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }),
+      );
+      function matchesText(job, q) {
+        return matchesBooleanText(job, q);
+      }
+      function locationMatches(job, location) {
+        return matchesLocation(job, location, cities, $("includeRemoteAnywhere").checked);
+      }
+      function directSite(name) {
+        return sites.find((s) => s.name === name);
+      }
+      function noResultMessage(source) {
+        const direct = directSite(source);
+        return direct
+          ? `<div class="panel empty"><b>${direct.name} is ready as a direct live search.</b>This site does not provide results through the dashboard API. Copy the search brief below, then <a class="open" href="${direct.url}" target="_blank" rel="noopener">open ${direct.name} ↗</a>.</div>`
+          : '<div class="panel empty"><b>No roles match those filters.</b>Try broadening the job search or clearing one of the stricter filters.</div>';
+      }
+      function jobCardHtml(j) {
+        const strengths = j.evidence || [], gaps = j.fitGaps || [], constraints = j.eligibilityConstraints || [], requirements = j.applicationRequirements || [];
+        const resumeStrengths = j.resumeStrengths || strengths, comparison = j.resumeComparison || [], learningPlan = j.learningPlan || [];
+        const readinessPlan = Array.isArray(j.readinessPlan) && j.readinessPlan.length ? j.readinessPlan : learningPlan.map((action, index) => ({ day:index + 1, focus:"Readiness", action, deliverable:"Documented result", timebox:"60 min" }));
+        const interviewFit = Number(j.interviewFitScore ?? weightedMatch(j));
+        const opportunity = Number(j.opportunityQualityScore || 0);
+        const priority = j.recommendation || j.decision || "REVIEW";
+        const blockerRows = Array.isArray(j.blockerAssessment) ? j.blockerAssessment : [];
+        const priorityClass = priority === "SKIP" ? "priority-skip" : ["PRIORITY APPLY","APPLY"].includes(priority) ? "priority-apply" : "";
+        const strategicDetail = `<details class="jd"><summary>Why apply or skip</summary><div class="jd-body"><div class="detail-grid"><span><b>Freshness</b>${escapeHtml(j.freshness?.band || "Date not verified")}</span><span><b>Source quality</b>${escapeHtml(j.sourceQuality?.label || "Not assessed")}</span><span><b>Language risk</b>${escapeHtml(j.languageRisk?.severity || "Not assessed")} · ${escapeHtml(j.languageRisk?.evidence || "")}</span><span><b>Salary evidence</b>${escapeHtml(j.salaryAssessment?.basis || "Not published")} · ${escapeHtml(j.salaryAssessment?.range || "Not confirmed")}</span><span><b>Commute / remote</b>${escapeHtml(j.commuteRemoteAssessment || "Needs confirmation")}</span><span><b>Career value</b>${escapeHtml(j.careerValueAssessment || "Needs confirmation")}</span><span><b>Job security</b>${escapeHtml(j.jobSecurityAssessment || "Needs current evidence")}</span><span><b>Document gate</b>${escapeHtml(j.documentGenerationGate || "Review first")}</span></div>${blockerRows.length ? `<b>Hard-filter review</b><div class="comparison-table">${blockerRows.map(item => `<div><b>${escapeHtml(item.factor)}</b><span>${escapeHtml(item.severity)}</span><p>${escapeHtml(item.evidence)}</p></div>`).join("")}</div>` : ""}</div></details>`;
+        const readinessRows = readinessPlan.map(item => `<tr><td><b>Day ${escapeHtml(item.day)}</b></td><td>${escapeHtml(item.focus)}</td><td>${escapeHtml(item.action)}</td><td>${escapeHtml(item.deliverable)}</td><td>${escapeHtml(item.timebox)}</td></tr>`).join("");
+        const history = j.applicationHistory || [];
+        const target = applicationTarget(j);
+        const rawApplicationUrl = applicationUrl(j);
+        const url = escapeHtml(rawApplicationUrl);
+        const storedJd = String(j.description || j.jdSnapshot || "").trim();
+        const hasFullStoredJd = (j.jdFetched === true && storedJd.length >= 900) || storedJd.length >= 1400;
+        const detail = escapeHtml(hasFullStoredJd ? storedJd : "A complete JD has not been stored yet. Open Prepare application to retrieve it from the exact posting; if the source blocks retrieval, paste the complete JD there.");
+        const sourceList = [...new Set(j.sources || [j.source])].filter(Boolean);
+        const checkedAt = j.lastVerifiedAt || j.lastSeenAt || j.foundAt || null;
+        const sourceCheck = j.lastVerifiedAt
+          ? `Verified ${new Date(j.lastVerifiedAt).toLocaleDateString("en-GB")}`
+          : checkedAt
+            ? `Source checked ${new Date(checkedAt).toLocaleDateString("en-GB")}`
+            : "Source will be checked during preparation";
+        const routeOrigin = "Stuttgart, Germany";
+        const hasExactAddress = Boolean(String(j.workAddress || "").trim());
+        const destination = hasExactAddress
+          ? j.workAddress
+          : [j.company, j.location].filter(Boolean).join(", ");
+        const mapSearch = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
+        const drivingRoute = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(routeOrigin)}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+        const transitRoute = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(routeOrigin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
+        return `<article class="panel job" id="job-${escapeHtml(j.id)}">
+          <div class="jobtop"><div><h3>${escapeHtml(j.title)}</h3><p class="company">${escapeHtml(j.company)} · ${escapeHtml(j.location)}</p></div><div class="jobtop-actions"><a class="open" href="${url}" target="_blank" rel="noopener"${target.url ? "" : ' title="Exact application URL was not supplied; opens a targeted application-page search."'}>Apply ↗</a><button class="share-job" type="button" data-job-id="${escapeHtml(j.id)}">Share</button></div></div>
+          <p class="origin"><b>Source${sourceList.length > 1 ? "s" : ""}:</b> ${sourceList.map(escapeHtml).join(" · ")} ${j.url ? `· ${escapeHtml(host(j.url))}` : ""}${j.verified ? " · verified posting" : ""}</p>
+          <div class="tags"><span class="tag match">${interviewFit}% interview fit</span><span class="tag">${opportunity}% opportunity quality</span><span class="tag ${priorityClass}">${escapeHtml(priority)}</span>${j.careerChangePossible ? '<span class="tag agent-badge">Quereinstieg möglich</span>' : ""}<span class="tag">${escapeHtml(j.workType)}</span><span class="tag">${j.remote ? "Remote / hybrid" : "On-site / not stated"}</span><span class="tag">${escapeHtml(j.rawLanguage)}</span>${j.origin === "agent" ? '<span class="tag agent-badge">Verified tracker</span>' : ""}${j.active === false ? '<span class="tag">Unavailable after rechecks</span>' : ""}</div>
+          <div class="strategy-summary"><div><b>Interview fit</b><strong>${interviewFit}/100</strong></div><div><b>Opportunity</b><strong>${opportunity}/100</strong></div><div><b>Priority</b><strong>${escapeHtml(priority)}</strong></div><div><b>Assessment</b><strong>${escapeHtml(j.assessmentConfidence || "Provisional")}</strong></div></div>
+          ${strategicDetail}
+          <div class="evidence"><b>Match evidence</b><p>${j.origin === "agent" ? "Verified strengths are separated from gaps and practical constraints. Adjust Match weighting in Filters to personalise this score." : "Only skills explicitly detected in the title or source description count toward this discovery score."}</p><div class="proof">${strengths.length ? strengths.map(x => `<span>✓ ${escapeHtml(x)}</span>`).join("") : "<span>Title alignment only — review the source.</span>"}</div></div>
+          <details class="commute" data-job-id="${escapeHtml(j.id)}" data-map-query="${escapeHtml(destination)}"><summary>Google Map and route from the configured origin</summary><div class="commute-body"><p class="commute-note"><b>Destination:</b> ${escapeHtml(destination)} · ${hasExactAddress ? "Exact address supplied by the job record." : "Street address was not supplied; Google Maps will resolve the employer and stated location. Confirm the destination before travelling."}</p><div class="commute-actions"><a href="${escapeHtml(mapSearch)}" target="_blank" rel="noopener">Open in Google Maps</a><a href="${escapeHtml(drivingRoute)}" target="_blank" rel="noopener">Driving route</a><a href="${escapeHtml(transitRoute)}" target="_blank" rel="noopener">Public transport route</a></div><div class="commute-map" aria-live="polite"><span class="muted">Map loads when this section is opened.</span></div></div></details>
+          <details class="jd" data-job-id="${escapeHtml(j.id)}" data-has-full-jd="${hasFullStoredJd}"><summary>JD details and strategic assessment</summary><div class="jd-body"><div class="jd-refresh-row"><button class="refresh-jd" type="button" data-job-id="${escapeHtml(j.id)}">Refresh full JD</button><span class="jd-fetch-status muted" aria-live="polite">${hasFullStoredJd ? `Stored full JD · ${escapeHtml(j.jdSource || "verified source")}` : "Open this section to retrieve the full JD."}</span></div><div class="detail-grid"><span><b>Role track</b>${escapeHtml(j.track || "Not stated")}</span><span><b>Employment</b>${escapeHtml(j.employment || j.workType || "Not stated")}</span><span><b>Recruiter/contact</b>${escapeHtml(j.recruiterContact || "Not listed")}</span><span><b>Open status</b>${escapeHtml(j.openStatus || j.availabilityStatus || "Not stated")}</span><span><b>Salary basis</b>${escapeHtml(j.salaryAssessment?.basis || j.salaryBasis || "Not disclosed")}</span><span><b>Recommended CV</b>${escapeHtml(j.recommendedCvBase || "Use verified base CV")}</span><span><b>Checked</b>${checkedAt ? new Date(checkedAt).toLocaleString("en-GB") : "During application preparation"}</span><span><b>Tracker location</b>${escapeHtml(j.trackerSheet ? `${j.trackerSheet}, row ${j.trackerRow}` : "SQLite and Excel live-results sheet")}</span></div><b>${hasFullStoredJd ? "Full JD / stored snapshot" : "JD retrieval status"}</b><p class="jd-snapshot">${detail}</p><b>Requirement-evidence matrix</b><p>${escapeHtml(j.resumeVerdict || "Assessment is based only on the available JD and approved resume evidence.")}</p>${comparison.length ? `<div class="comparison-table">${comparison.map(item => `<div><b>${escapeHtml(item.requirement)}</b><span>${escapeHtml(item.matchType || item.assessment)}</span><p>${escapeHtml(item.candidateEvidence || item.evidence)}</p><div class="matrix-meta"><small>${escapeHtml(item.importance || "Importance unclear")}</small><small>${escapeHtml(item.evidenceRecency || "Recency unknown")}</small><small>${escapeHtml(item.evidenceDepth || "Depth unknown")}</small><small>${escapeHtml(item.confidence || "Confidence unknown")}</small><small>${escapeHtml(item.risk || "Risk not assessed")}</small></div></div>`).join("")}</div>` : ""}<b>Why it fits — evidence-backed</b><ul class="assessment-list">${resumeStrengths.length ? resumeStrengths.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No verified strength was detected from the available JD text.</li>"}</ul><b>Main risks / gaps</b><ul class="assessment-list">${gaps.length ? gaps.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No major gap detected from the available JD; confirm depth, recency and employer-specific tools.</li>"}</ul>${j.cvAngle ? `<b>Suggested CV and application angle</b><p>${escapeHtml(j.cvAngle)}</p>` : ""}<b>${readinessPlan.length > 7 ? "Two-week" : "One-week"} interview readiness plan</b><div class="readiness-table-wrap"><table class="readiness-table"><thead><tr><th>Day</th><th>Focus</th><th>Daily action</th><th>Deliverable</th><th>Time</th></tr></thead><tbody>${readinessRows}</tbody></table></div>${constraints.length ? `<b>Practical checks</b><ul class="assessment-list">${constraints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}${requirements.length ? `<b>Application requirements</b><ul class="assessment-list">${requirements.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}</div></details>
+          <div class="job-actions"><label class="status-control">Application status <select class="application-status-control" data-job-id="${escapeHtml(j.id)}">${statuses.map(s => `<option${s === j.applicationStatus ? " selected" : ""}>${s}</option>`).join("")}</select></label><label class="comment-control"><span>Application comment</span><textarea class="application-comment-control" data-job-id="${escapeHtml(j.id)}" maxlength="2000" placeholder="Why I applied or skipped it, follow-up plan, interview notes…">${escapeHtml(j.applicationComment || "")}</textarea><button class="save-comment" type="button" data-job-id="${escapeHtml(j.id)}">Save note</button><span class="comment-save-state" aria-live="polite"></span></label><button class="prepare-application" type="button" data-job-id="${escapeHtml(target.id)}"${["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) || j.documentGenerationGate === "DO NOT GENERATE" ? " disabled" : ""}>${j.documentGenerationGate === "CONFIRM FIRST" ? "Review stretch application" : target.applicationPackage ? "Regenerate package" : "Prepare application"}</button><span class="muted">${escapeHtml(sourceCheck)} · ${escapeHtml(j.documentGenerationGate || "Review document need")}</span></div>
+          <div class="application-timing"><span><b>Applied:</b> ${escapeHtml(formatDateTime(j.appliedAt, "Date not recorded"))}</span><span><b>Status last changed:</b> ${escapeHtml(formatDateTime(j.applicationStatusChangedAt, "Timestamp not recorded"))}</span>${history.length ? `<details class="status-history"><summary>View status history (${history.length})</summary><ol>${history.map(event => `<li>${escapeHtml(formatDateTime(event.changedAt))}: ${escapeHtml(event.previousStatus || "—")} → ${escapeHtml(event.newStatus)}${event.source ? ` · ${escapeHtml(event.source)}` : ""}</li>`).join("")}</ol></details>` : ""}</div>
+          <div class="foot"><span>${escapeHtml(j.salaryText || money(j.salaryMax || j.salaryMin))}</span><span>${j.posted ? `Posted ${new Date(j.posted).toLocaleDateString("en-GB")}` : j.foundAt ? `Found ${new Date(j.foundAt).toLocaleDateString("en-GB")}` : "Date not stated"}</span></div>
+        </article>`;
+      }
+      function boardHtml(rows) {
+        const statusRows = rows;
+        return `<div class="board">${statuses.map(status => {
+          const items = statusRows.filter(job => job.applicationStatus === status).sort((a, b) => newestTimestamp(b) - newestTimestamp(a));
+          const slug = lower(status).replace(/[^a-z0-9]+/g, "-");
+          return `<section class="board-column status-${slug}" data-status="${escapeHtml(status)}"><h3>${escapeHtml(status)}<span>${items.length}</span></h3>${items.map(j => {
+            const history = j.applicationHistory || [];
+            const newest = newestTimestamp(j);
+            return `<article class="board-card"><h4>${escapeHtml(j.title)}</h4><p>${escapeHtml(j.company)} · ${escapeHtml(j.location)} · ${weightedMatch(j)}%</p><p><b>Newest activity:</b> ${escapeHtml(newest ? formatDateTime(new Date(newest)) : "date not recorded")}${history.length ? ` · ${history.length} history event${history.length === 1 ? "" : "s"}` : ""}</p><p class="board-note">${escapeHtml(j.applicationComment || "No application note recorded.")}</p><select class="application-status-control" data-job-id="${escapeHtml(j.id)}">${statuses.map(s => `<option${s === j.applicationStatus ? " selected" : ""}>${s}</option>`).join("")}</select><div class="board-actions"><button class="board-review" type="button" data-job-id="${escapeHtml(j.id)}">Review full record</button><a class="open" href="${escapeHtml(applicationUrl(j))}" target="_blank" rel="noopener">Apply ↗</a></div></article>`;
+          }).join("") || '<span class="muted">No roles</span>'}</section>`;
+        }).join("")}</div>`;
+      }
+      function render() {
+        const q = $("search").value.trim(),
+          sourceQuery = $("query").value.trim(),
+          company = lower($("company").value.trim()),
+          source = $("sourceSelect").value,
+          location = $("location").value,
+          language = $("language").value,
+          workType = $("workType").value,
+          experience = $("experience").value,
+          min = +$("salary").value || 0,
+          fresh = $("freshness").value,
+          model = $("model").value,
+          match = +$("match").value || 0,
+          recommendation = $("recommendation").value,
+          opportunity = +$("opportunity").value || 0,
+          salaryOnly = $("salaryOnly").checked,
+          applyOnly = $("applyOnly").checked,
+          includeRemoteAnywhere = $("includeRemoteAnywhere").checked,
+          careerChangeOnly = $("careerChangeOnly").checked,
+          stream = $("stream").value,
+          applicationStatus = $("applicationStatus").value,
+          sort = $("sort").value,
+          now = Date.now();
+        let rows = jobs.filter((j) => {
+          const age = j.posted
+            ? (now - new Date(j.posted).getTime()) / 86400000
+            : null;
+          return (
+            matchesText(j, q) &&
+            matchesText(j, sourceQuery) &&
+            locationMatches(j, location) &&
+            (!company || lower(j.company).includes(company)) &&
+            matchesSource(j, source) &&
+            matchesLanguage(j, language) &&
+            matchesWorkType(j, workType) &&
+            matchesExperience(j, experience) &&
+            (!min || j.salaryMax >= min || j.salaryMin >= min) &&
+            (!fresh ||
+              (fresh === "dated"
+                ? Boolean(j.posted)
+                : age !== null && age <= +fresh)) &&
+            (!model || (model === "remote" ? j.remote : !j.remote)) &&
+            weightedMatch(j) >= match &&
+            (!recommendation || j.recommendation === recommendation) &&
+            Number(j.opportunityQualityScore || 0) >= opportunity &&
+            (!salaryOnly || Boolean(j.salaryMin || j.salaryMax)) &&
+            (!applyOnly || Boolean(j.url)) &&
+            (!careerChangeOnly || j.careerChangePossible === true)
+            && (!stream || (stream === "agent" ? j.origin === "agent" : stream === "live" ? j.origin !== "agent" : lower(j.rawLanguage).includes("english")))
+            && (!applicationStatus || (applicationStatus === "active"
+              ? j.lifecycleStatus !== "archived"
+                && !["Rejected", "Withdrawn", "Case Closed"].includes(j.applicationStatus)
+                && j.active !== false
+                && !/closed|expired|unavailable|removed|filled|besetzt|abgelaufen|nicht mehr verf.gbar/i.test(j.openStatus || "")
+              : j.applicationStatus === applicationStatus))
+          );
+        });
+        rows = consolidateDisplayRows(rows);
+        rows.sort((a, b) =>
+          (statusRank[a.applicationStatus] ?? statuses.length) - (statusRank[b.applicationStatus] ?? statuses.length) ||
+          (sort === "priority"
+            ? Number(b.applicationPriorityScore || 0) - Number(a.applicationPriorityScore || 0)
+            : sort === "salary"
+            ? (b.salaryMax || b.salaryMin) - (a.salaryMax || a.salaryMin)
+            : sort === "newest"
+              ? String(b.posted).localeCompare(String(a.posted))
+              : sort === "company"
+                ? a.company.localeCompare(b.company)
+                : sort === "source"
+                  ? a.source.localeCompare(b.source)
+                  : weightedMatch(b) - weightedMatch(a)),
+        );
+        const active = [
+          q,
+          sourceQuery,
+          company,
+          source,
+          location,
+          language,
+          workType,
+          experience,
+          min,
+          fresh,
+          model,
+          match,
+          recommendation,
+          opportunity,
+          salaryOnly,
+          applyOnly,
+          includeRemoteAnywhere,
+          careerChangeOnly,
+          stream,
+          applicationStatus,
+        ].filter((x) => x !== "" && x !== 0 && x !== false).length;
+        $("filterStatus").textContent = active
+          ? `${active} active filter${active === 1 ? "" : "s"} · results update instantly`
+          : "No filters applied";
+        $("count").textContent = rows.length;
+        $("strongCount").textContent = rows.filter((j) => ["PRIORITY APPLY","APPLY"].includes(j.recommendation)).length;
+        $("resultCount").textContent =
+          `${rows.length} result${rows.length === 1 ? "" : "s"}`;
+        $("jobs").className = viewMode === "board" ? "cards board-view" : "cards";
+        $("jobs").innerHTML = rows.length ? (viewMode === "board" ? boardHtml(rows) : rows.map(jobCardHtml).join("")) : noResultMessage(source);
+      }
+      let renderFrame = 0;
+      function queueRender() {
+        cancelAnimationFrame(renderFrame);
+        renderFrame = requestAnimationFrame(render);
+      }
+      function renderNetwork(statuses) {
+        const priority = { ok:0, results:0, open_search:1, needs_key:2, unavailable:3 };
+        const availabilityPriority = { available:0, access_restricted:1, not_checked:2, unavailable:3 };
+        const all = [...statuses, ...sites].sort((a, b) =>
+          (availabilityPriority[a.availability || (a.status === "ok" ? "available" : "not_checked")] ?? 9) - (availabilityPriority[b.availability || (b.status === "ok" ? "available" : "not_checked")] ?? 9) ||
+          (priority[a.status] ?? 9) - (priority[b.status] ?? 9) ||
+          String(a.name || a.source).localeCompare(String(b.name || b.source))
+        );
+        $("networkSummary").textContent =
+          `${all.length} total · ${statuses.filter((s) => s.status === "ok").length} fetched · ${sites.filter((s) => s.availability === "available").length} reachable · ${sites.filter((s) => s.availability === "access_restricted").length} browser-only`;
+        $("sources").innerHTML = all
+          .map(
+            (s) =>
+              `<span class="source ${s.status}" title="${escapeHtml(s.message || s.healthMessage || (s.checkedAt ? `Checked ${new Date(s.checkedAt).toLocaleString("en-GB")}` : "Direct source"))}">${escapeHtml(s.name || s.source)}${s.status === "ok" ? ": " + s.count : " " + (s.status === "open_search" ? `direct · ${s.availability === "available" ? "reachable" : s.availability === "access_restricted" ? "browser access" : s.availability === "unavailable" ? "check failed" : "not checked"}` : "· " + s.status.replace("_", " "))}${Number.isFinite(s.latencyMs) ? ` · ${(s.latencyMs / 1000).toFixed(1)}s` : ""}</span>`,
+          )
+          .join("");
+      }
+      function applyDatabase(data) {
+        jobs = data.jobs || [];
+        sites = data.directSources || [];
+        sourceStates = data.sourceStatus || [];
+        savedSearches = data.savedSearches || savedSearches;
+        activeSavedSearchId = data.activeSavedSearchId || activeSavedSearchId;
+        databaseStats = data.databaseStats || {};
+        $("updated").textContent = data.refreshedAt
+          ? `Database refreshed ${new Date(data.refreshedAt).toLocaleString("en-GB")}`
+          : "Loaded Excel tracker · live database not refreshed yet";
+        $("online").textContent = sourceStates.filter((x) => x.status === "ok").length;
+        $("agentCount").textContent = data.agentLeadCount || 0;
+        $("dbCount").textContent = databaseStats.total || jobs.length;
+        $("dbStatus").textContent = `${databaseStats.active ?? jobs.filter(job => job.active !== false).length} active · ${databaseStats.archived ?? jobs.filter(job => job.active === false).length} archived`;
+        const conversion = databaseStats.conversion || {};
+        $("outcomeSummary").textContent = conversion.applications
+          ? `${conversion.applications} tracked applications · ${conversion.interviews || 0} current interview/offer outcomes · application-to-interview ${conversion.applicationToInterview ?? "not enough data"}% · interview-to-offer ${conversion.interviewToOffer ?? "not enough data"}%. Treat this as directional until stage-history cohorts are large enough.`
+          : "No completed application funnel is available yet. The system will learn from recorded applications, interview stages, rejections and offers without overreacting to one outcome.";
+        let excelSync = data.excelSync;
+        try { if (typeof excelSync === "string") excelSync = JSON.parse(excelSync); } catch { excelSync = null; }
+        $("excelState").textContent = excelSync ? "Synced" : "Pending";
+        $("excelStatus").textContent = excelSync
+          ? `${excelSync.jobs ?? jobs.length} rows · ${excelSync.syncedAt ? new Date(excelSync.syncedAt).toLocaleString("en-GB") : "current session"}`
+          : "The next database change will create the Excel mirror";
+        $("subtitle").textContent = `${data.query} · ${data.location || "Germany"} · saved database`;
+        sourceOptions();
+        applicationStatusOptions();
+        renderSavedSearches();
+        if (!restoredSavedSearch && activeSavedSearchId) {
+          const selected = savedSearches.find(item => item.id === activeSavedSearchId);
+          if (selected) {
+            $("savedSearch").value = selected.id;
+            applyCriteria(selected.criteria);
+          }
+          restoredSavedSearch = true;
+        }
+        renderSites();
+        renderNetwork(sourceStates);
+        render();
+      }
+      function setView(mode) {
+        viewMode = mode === "board" ? "board" : "list";
+        if (viewMode === "board" && $("applicationStatus").value === "active") {
+          $("applicationStatus").value = "";
+          $("applicationStatus").dataset.initialized = "true";
+        }
+        localStorage.setItem("alex-jobs-view", viewMode);
+        $("listView").classList.toggle("active", viewMode === "list");
+        $("boardView").classList.toggle("active", viewMode === "board");
+        $("listView").setAttribute("aria-pressed", String(viewMode === "list"));
+        $("boardView").setAttribute("aria-pressed", String(viewMode === "board"));
+        render();
+      }
+      $("listView").onclick = () => setView("list");
+      $("boardView").onclick = () => setView("board");
+      function duration(seconds) {
+        seconds = Math.max(0, Number(seconds) || 0);
+        return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      }
+      function showProgress(state) {
+        $("refreshProgress").classList.add("active");
+        $("refreshBar").style.width = `${state.progress || 0}%`;
+        $("refreshPercent").textContent = `${state.progress || 0}%`;
+        $("refreshPhase").textContent = state.phase || "Refreshing database";
+        $("refreshSources").textContent = state.totalSources
+          ? `${state.completedSources || 0} of ${state.totalSources} active source-pool entries checked`
+          : "Preparing automatic sources";
+        $("refreshTime").textContent = `Elapsed ${duration(state.elapsedSeconds)}${state.remainingSeconds !== null && state.remainingSeconds !== undefined ? ` · about ${duration(state.remainingSeconds)} remaining` : ""}`;
+      }
+      async function loadDatabase() {
+        const liveRevisionAtStart = liveDatabaseRevision;
+        const response = await fetch(`/api/jobs?query=${encodeURIComponent($("query").value.trim())}&location=${encodeURIComponent($("location").value)}`, { cache:"no-store" });
+        if (!response.ok) throw new Error("Could not load the saved job database.");
+        const data = await response.json();
+        if (liveRevisionAtStart === liveDatabaseRevision) applyDatabase(data);
+      }
+      async function loadEmailSyncStatus() {
+        const status = $("emailSyncStatus");
+        try {
+          const response = await fetch("/api/email-reconciliation-request?_=" + Date.now(), { cache:"no-store" });
+          if (!response.ok) return;
+          const data = await response.json();
+          let checkpoint = data.checkpoint?.value || data.checkpoint || null;
+          try { if (typeof checkpoint === "string") checkpoint = JSON.parse(checkpoint); } catch { checkpoint = null; }
+          const pending = data.request?.status === "pending-codex" && (!checkpoint?.at || Date.parse(data.request.requestedAt) > Date.parse(checkpoint.at));
+          if (pending) {
+            status.className = "pending";
+            status.textContent = "Pending Codex Gmail review requested " + new Date(data.request.requestedAt).toLocaleString("en-GB") + ".";
+          } else if (checkpoint?.at) {
+            status.className = "success";
+            status.textContent = "Last Gmail check: " + new Date(checkpoint.at).toLocaleString("en-GB") + " - " + Number(checkpoint.genuineChanges || checkpoint.evidenceCount || 0) + " genuine update(s).";
+          }
+        } catch {}
+      }
+      async function requestEmailSync() {
+        const button = $("emailSync");
+        const status = $("emailSyncStatus");
+        button.disabled = true;
+        status.className = "pending";
+        status.textContent = "Recording a secure seven-day reconciliation request...";
+        try {
+          const response = await fetch("/api/email-reconciliation-request", { method:"POST", headers:writeHeaders(), body:JSON.stringify({ days:7 }) });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "The email reconciliation request could not be recorded.");
+          try { await navigator.clipboard.writeText(data.request.prompt); } catch {}
+          status.className = "success";
+          status.textContent = "Request recorded " + new Date(data.request.requestedAt).toLocaleString("en-GB") + ". Open this Codex project and run the copied request; the dashboard cannot directly reuse ChatGPT Gmail credentials.";
+        } catch (error) {
+          status.className = "";
+          status.textContent = error.message;
+        } finally { button.disabled = false; }
+      }
+      $("emailSync").onclick = requestEmailSync;
+      loadEmailSyncStatus();
+      setInterval(loadEmailSyncStatus, 30000);
+      async function refresh(trigger = "manual") {
+        const b = $("refresh");
+        b.disabled = true;
+        b.textContent = "Refreshing database...";
+        $("subtitle").textContent = trigger === "automatic"
+          ? "Opening Alex Job — automatically refreshing live results now."
+          : "Starting a manual live-source refresh. Keep this page open.";
+        try {
+          const start = await fetch("/api/refresh", {
+            method:"POST",
+            headers:{"content-type":"application/json"},
+            body:JSON.stringify({ query:$("query").value.trim(), location:$("location").value, includeRemoteAnywhere:$("includeRemoteAnywhere").checked })
+          });
+          if (!start.ok) throw new Error("The refresh could not be started.");
+          let state = await start.json();
+          showProgress(state);
+          while (state.status === "running") {
+            await new Promise(resolve => setTimeout(resolve, 900));
+            const response = await fetch(`/api/refresh?id=${encodeURIComponent(state.id)}`, { cache:"no-store" });
+            if (!response.ok) throw new Error("The refresh progress could not be read.");
+            state = await response.json();
+            showProgress(state);
+          }
+          if (state.status === "failed") throw new Error(state.error || "The refresh failed.");
+          liveDatabaseRevision += 1;
+          applyDatabase(state.result);
+          $("subtitle").textContent = `${state.result.query} · ${state.result.location || "Germany"} · database saved after ${duration(state.elapsedSeconds)}`;
+        } catch (error) {
+          $("subtitle").textContent = error.message;
+          $("refreshPhase").textContent = "Refresh failed";
+        } finally {
+          b.disabled = false;
+          b.textContent = "Refresh live results";
+        }
+      }
+      function scheduleRefresh() {
+        $("subtitle").textContent = "Search criteria changed. Click Refresh live results to rebuild the live database; other filters apply instantly.";
+      }
+      [
+        "search",
+        "company",
+        "sourceSelect",
+        "language",
+        "workType",
+        "experience",
+        "salary",
+        "freshness",
+        "model",
+        "match",
+        "recommendation",
+        "opportunity",
+        "salaryOnly",
+        "applyOnly",
+        "includeRemoteAnywhere",
+        "careerChangeOnly",
+        "stream",
+        "applicationStatus",
+        "sort",
+      ].forEach((id) =>
+        $(id).addEventListener(
+          id === "salaryOnly" || id === "applyOnly" || id === "includeRemoteAnywhere" || id === "careerChangeOnly" || id === "sort" || id === "stream" || id === "applicationStatus" || id === "recommendation" || id === "opportunity"
+            ? "change"
+            : "input",
+          id === "salaryOnly" || id === "applyOnly" || id === "includeRemoteAnywhere" || id === "careerChangeOnly" || id === "sort" || id === "stream" || id === "applicationStatus" || id === "recommendation" || id === "opportunity" ? render : queueRender,
+        ),
+      );
+      $("query").addEventListener("input", () => {
+        queueRender();
+        scheduleRefresh();
+      });
+      $("location").addEventListener("change", () => {
+        const chinaLocation = /^(China major cities|Shanghai \+ hybrid|Shanghai only|Beijing|Guangzhou|Shenzhen|Hangzhou|Chengdu|Nanjing|Suzhou|Wuhan|Xi'an|Chongqing|Tianjin|Qingdao|Xiamen|Ningbo)$/i.test($("location").value);
+        if (chinaLocation && !$("language").value) $("language").value = "English accepted";
+        render();
+        scheduleRefresh();
+      });
+      $("query").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          refresh();
+        }
+      });
+      $("copy").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(brief());
+          $("copy").textContent = "Copied";
+          setTimeout(() => ($("copy").textContent = "Copy search brief"), 1500);
+        } catch {
+          $("copy").textContent = "Select text manually";
+        }
+      };
+      $("clear").onclick = () => {
+        ["query", "search", "company", "salary"].forEach(
+          (id) => ($(id).value = ""),
+        );
+        [
+          "location",
+          "sourceSelect",
+          "language",
+          "workType",
+          "experience",
+          "freshness",
+          "model",
+        ].forEach((id) => ($(id).value = ""));
+        $("match").value = "0";
+        $("salaryOnly").checked = false;
+        $("applyOnly").checked = false;
+        $("includeRemoteAnywhere").checked = false;
+        $("careerChangeOnly").checked = false;
+        render();
+        scheduleRefresh();
+      };
+      $("refresh").onclick = refresh;
+      $("mobileRefresh").onclick = refresh;
+      $("mobileFilters").onclick = () => document.querySelector(".filter")?.scrollIntoView({ behavior:"smooth", block:"start" });
+      $("mobileResults").onclick = () => document.querySelector(".sectionhead")?.scrollIntoView({ behavior:"smooth", block:"start" });
+      $("mobileBoard").onclick = () => { setView("board"); document.querySelector(".sectionhead")?.scrollIntoView({ behavior:"smooth", block:"start" }); };
+      $("jobs").addEventListener("change", async (event) => {
+        const control = event.target.closest(".application-status-control");
+        if (!control) return;
+        const previous = jobs.find(job => job.id === control.dataset.jobId)?.applicationStatus;
+        control.disabled = true;
+        try {
+          const response = await fetch("/api/application-status", {
+            method: "POST",
+            headers: writeHeaders(),
+            body: JSON.stringify({ id: control.dataset.jobId, applicationStatus: control.value }),
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Could not save status");
+          jobs = jobs.map(job => job.id === data.job.id ? { ...job, ...data.job } : job);
+          $("updated").textContent = `${control.value} saved to SQLite and Excel · ${new Date().toLocaleString("en-GB")}`;
+          applicationStatusOptions();
+          render();
+        } catch (error) {
+          control.value = previous || "Stashed";
+          alert(error.message);
+          control.disabled = false;
+        }
+      });
+      async function saveApplicationComment(control) {
+        if (!control || control.dataset.saving === "true") return;
+        const job = jobs.find(item => item.id === control.dataset.jobId);
+        const comment = control.value.trim();
+        if ((job?.applicationComment || "") === comment) return;
+        const state = control.closest(".comment-control")?.querySelector(".comment-save-state");
+        control.dataset.saving = "true";
+        control.disabled = true;
+        if (state) state.textContent = "Saving to SQLite and Excel…";
+        try {
+          const response = await fetch("/api/application-comment", {
+            method: "POST",
+            headers: writeHeaders(),
+            body: JSON.stringify({ id: control.dataset.jobId, applicationComment: comment }),
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Could not save comment");
+          jobs = jobs.map(item => item.id === data.job.id ? { ...item, ...data.job } : item);
+          if (state) state.textContent = `Saved to SQLite and Excel at ${new Date().toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" })}`;
+          $("updated").textContent = `Application comment saved to SQLite and Excel · ${new Date().toLocaleString("en-GB")}`;
+        } catch (error) {
+          if (state) state.textContent = error.message;
+          alert(error.message);
+        } finally {
+          control.disabled = false;
+          control.dataset.saving = "false";
+        }
+      }
+      $("jobs").addEventListener("focusout", (event) => {
+        const control = event.target.closest(".application-comment-control");
+        if (control) saveApplicationComment(control);
+      });
+      $("jobs").addEventListener("keydown", (event) => {
+        const control = event.target.closest(".application-comment-control");
+        if (control && event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          saveApplicationComment(control);
+        }
+      });
+      let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false;
+      const preparedPdfFiles = new Map();
+      function setStudioOpen(open) {
+        const studio = $("applicationStudio");
+        studio.hidden = !open;
+        studio.classList.toggle("open", open);
+        document.body.style.overflow = open ? "hidden" : "";
+      }
+      function studioMessage(message, error = false) {
+        $("studioStatus").textContent = message;
+        $("studioStatus").classList.toggle("error", error);
+      }
+      function selectedPackageDocument() {
+        return currentApplicationPackage?.documents?.[currentPackageDocumentType]?.[currentLetterLanguage] || null;
+      }
+      function pdfFileName(document) {
+        return String(document?.document?.fileName || "application.pdf").replace(/\.docx$/i,".pdf");
+      }
+      function preparePdfFile(url, fileName) {
+        const existing = preparedPdfFiles.get(url);
+        if (existing) return existing.promise;
+        const record = { file:null, promise:null };
+        record.promise = fetch(url, { cache:"no-store" }).then(async response => {
+          if (!response.ok) {
+            let message = "The PDF could not be prepared";
+            try { message = (await response.json()).error || message; } catch {}
+            throw new Error(message);
+          }
+          const blob = await response.blob();
+          if (blob.size < 1000 || !/application\/pdf/i.test(blob.type || response.headers.get("content-type") || "")) throw new Error("The generated PDF is invalid");
+          record.file = new File([blob], fileName, { type:"application/pdf", lastModified:Date.now() });
+          return record.file;
+        }).catch(error => {
+          preparedPdfFiles.delete(url);
+          throw error;
+        });
+        preparedPdfFiles.set(url,record);
+        return record.promise;
+      }
+      function warmPdfControl(control, url, fileName, label, waitFor = Promise.resolve()) {
+        control.dataset.pdfUrl = url;
+        control.dataset.fileName = fileName;
+        control.dataset.readyLabel = label;
+        control.disabled = true;
+        control.textContent = `Preparing ${label.replace(/^Save | · /g," ")}…`;
+        const ready = waitFor.catch(() => {}).then(() => preparePdfFile(url,fileName));
+        ready.then(() => {
+          if (control.dataset.pdfUrl !== url) return;
+          control.disabled = false;
+          control.textContent = label;
+        }).catch(error => {
+          if (control.dataset.pdfUrl !== url) return;
+          control.disabled = false;
+          control.textContent = `Retry ${label}`;
+          control.dataset.pdfError = error.message;
+        });
+        return ready;
+      }
+      async function savePackagePdf(control) {
+        const url = control.dataset.pdfUrl;
+        const fileName = control.dataset.fileName;
+        if (!url || !fileName) return studioMessage("This PDF is not ready yet.",true);
+        const originalLabel = control.dataset.readyLabel || control.textContent;
+        control.disabled = true;
+        control.textContent = "Preparing PDF…";
+        try {
+          const file = preparedPdfFiles.get(url)?.file || await preparePdfFile(url,fileName);
+          const shareData = { files:[file], title:file.name };
+          if (typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            studioMessage("The PDF was handed to your device. Choose Save to Files or another native action.");
+          } else {
+            const objectUrl = URL.createObjectURL(file);
+            const download = document.createElement("a");
+            download.href = objectUrl;
+            download.download = file.name;
+            download.hidden = true;
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl),60000);
+            studioMessage("The PDF was sent to your browser's downloads.");
+          }
+        } catch (error) {
+          if (error.name !== "AbortError") studioMessage(error.message || "The PDF could not be saved.",true);
+        } finally {
+          control.disabled = false;
+          control.textContent = originalLabel;
+        }
+      }
+      function renderPackageDifference() {
+        const summary = currentApplicationPackage?.customizationSummary?.[currentLetterLanguage];
+        const container = $("packageDiffBody");
+        $("packageDiff").hidden = !summary;
+        if (!summary) return container.replaceChildren();
+        const rows = [
+          ["Headline changed", summary.headlineChanged],
+          ["Skills promoted", summary.skillsPromoted?.join(", ")],
+          ["Experience emphasized", summary.experienceEmphasized?.join(", ")],
+          ["Experience compressed", summary.experienceCompressed?.join(", ") || "None"],
+          ["Verified JD keywords", summary.verifiedKeywords?.join(", ") || "No extra verified terms"],
+          ["Gaps deliberately not added", summary.gapsNotAdded?.map(item => `${item.term} — ${item.reason}`).join("; ") || "None detected"]
+        ];
+        container.innerHTML = `<dl>${rows.map(([term,value]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value || "Not stated")}</dd>`).join("")}</dl>`;
+      }
+      function renderPackageHistory() {
+        const history = currentApplicationPackage?.history || [];
+        $("packageHistory").hidden = history.length < 2;
+        $("packageHistoryBody").innerHTML = history.map(item => `<div class="version-row"><span><b>v${item.versionNumber}</b> · ${escapeHtml(new Date(item.generatedAt).toLocaleString("en-GB"))}${item.manualEdits?.length ? ` · edited: ${escapeHtml(item.manualEdits.join(", "))}` : ""}</span>${item.versionNumber === currentApplicationPackage.currentVersion ? "<b>Current</b>" : `<button type="button" data-restore-version="${item.versionNumber}">Restore as new version</button>`}</div>`).join("");
+      }
+      function selectDocument(documentType = currentPackageDocumentType, language = currentLetterLanguage) {
+        currentPackageDocumentType = ["cv","coverLetter","remarks"].includes(documentType) ? documentType : "cv";
+        currentLetterLanguage = language;
+        const document = selectedPackageDocument();
+        if (!document) return;
+        $("documentChoices").querySelectorAll("button").forEach(button => button.classList.toggle("active", button.dataset.documentType === currentPackageDocumentType));
+        $("letterChoices").querySelectorAll("button").forEach(button => button.classList.toggle("active", button.dataset.language === language));
+        const languageLabel = language === "de" ? "German" : "English";
+        const typeLabel = currentPackageDocumentType === "cv" ? "CV / resume" : currentPackageDocumentType === "remarks" ? "portal note / Ihre Bemerkungen" : "cover letter";
+        $("letterLabel").textContent = `${languageLabel} ${typeLabel}${document.manualEdited ? " · manually edited" : ""}`;
+        $("coverLetterEditor").value = document.body;
+        const cv = currentApplicationPackage.documents.cv[language];
+        const letter = currentApplicationPackage.documents.coverLetter[language];
+        $("packageDownloadLanguage").textContent = languageLabel;
+        $("downloadCvDocx").href = cv.document.downloadUrl;
+        const cvPdfReady = warmPdfControl($("downloadCvPdf"),cv.document.pdfDownloadUrl,pdfFileName(cv),"Save CV · PDF");
+        $("downloadLetterDocx").href = letter.document.downloadUrl;
+        warmPdfControl($("downloadLetterPdf"),letter.document.pdfDownloadUrl,pdfFileName(letter),"Save cover letter · PDF",cvPdfReady);
+        $("packageDownloads").hidden = currentPackageDocumentType === "remarks";
+        $("printPackageDocument").hidden = currentPackageDocumentType === "remarks";
+        renderPackageDifference();
+      }
+      function showApplicationPackage(applicationPackage, message = "") {
+        const applicationReady = applicationPackage.quality?.applicationReady === true && applicationPackage.variants?.de && applicationPackage.variants?.en;
+        preparedPdfFiles.clear();
+        currentApplicationPackage = applicationReady ? applicationPackage : null;
+        $("studioStart").hidden = true;
+        $("jdFallback").hidden = applicationReady;
+        $("letterChoices").hidden = !applicationReady;
+        $("documentChoices").hidden = !applicationReady;
+        $("packageControls").hidden = !applicationReady;
+        $("letterField").hidden = !applicationReady;
+        $("saveCoverLetter").hidden = !applicationReady;
+        $("copyCoverLetter").hidden = !applicationReady;
+        $("packageDownloads").hidden = !applicationReady;
+        $("printPackageDocument").hidden = !applicationReady;
+        $("openApplication").hidden = !currentApplicationJob?.url;
+        $("openApplication").href = currentApplicationJob?.url || "#";
+        $("confirmSubmitted").hidden = !applicationReady;
+        if (!applicationReady) {
+          studioMessage("The job page could not be read. Paste the complete job description below.", true);
+          return;
+        }
+        $("packageMeta").innerHTML = `<span>Version ${applicationPackage.currentVersion}</span><span>Generated ${escapeHtml(new Date(applicationPackage.generatedAt).toLocaleString("en-GB"))}</span><span>${escapeHtml(applicationPackage.job.company)}</span><span>${escapeHtml(applicationPackage.job.title)}</span>`;
+        selectDocument(currentPackageDocumentType,currentLetterLanguage);
+        renderPackageHistory();
+        studioMessage(message || "Four editable documents are ready. Choose CV or cover letter, then German or English.");
+      }
+      async function openApplicationStudio(id) {
+        currentApplicationJob = jobs.find(job => job.id === id);
+        if (!currentApplicationJob) return;
+        $("studioTitle").textContent = currentApplicationJob.title;
+        $("studioCompany").textContent = `${currentApplicationJob.company} · ${currentApplicationJob.location}`;
+        currentApplicationPackage = null;
+        currentLetterLanguage = "de";
+        currentPackageDocumentType = "cv";
+        $("studioStart").hidden = false;
+        $("letterField").hidden = true;
+        $("letterChoices").hidden = true;
+        $("documentChoices").hidden = true;
+        $("packageControls").hidden = true;
+        $("jdFallback").hidden = true;
+        $("postingUrlInput").value = currentApplicationJob.url || "";
+        $("jobDescriptionInput").value = "";
+        ["saveCoverLetter","copyCoverLetter","printPackageDocument","openApplication","confirmSubmitted"].forEach(control => $(control).hidden = true);
+        $("packageDownloads").hidden = true;
+        setStudioOpen(true);
+        if (!currentApplicationJob.url) {
+          $("studioStart").hidden = true;
+          $("jdFallback").hidden = false;
+          studioMessage("No exact posting link is stored. Add its link or paste the complete job description.", true);
+        } else {
+          studioMessage("Read the job description, create both versions, then choose one.");
+        }
+        try {
+          const response = await fetch(`/api/application-package?id=${encodeURIComponent(id)}`, { cache:"no-store" });
+          const data = await response.json();
+          if (response.ok && data.applicationPackage?.quality?.applicationReady && data.applicationPackage?.variants?.de && data.applicationPackage?.variants?.en) {
+            showApplicationPackage(data.applicationPackage, "The latest saved package is ready. Earlier versions remain available below.");
+          }
+        } catch {}
+      }
+      async function prepareApplication(id, jobDescription = "", postingUrl = "", scope = "full") {
+        if (studioGenerationInProgress) return;
+        currentApplicationJob = jobs.find(job => job.id === id);
+        if (!currentApplicationJob) return;
+        studioGenerationInProgress = true;
+        $("generateCoverLetter").disabled = true;
+        $("generateFromUrl").disabled = true;
+        $("generateFromJd").disabled = true;
+        $("generateCoverLetter").textContent = "Reading job description...";
+        $("generateFromJd").textContent = jobDescription ? "Checking JD and creating..." : "Create German and English versions";
+        $("studioTitle").textContent = currentApplicationJob.title;
+        $("studioCompany").textContent = `${currentApplicationJob.company} · ${currentApplicationJob.location}`;
+        $("letterField").hidden = true;
+        $("letterChoices").hidden = true;
+        $("documentChoices").hidden = true;
+        $("packageControls").hidden = true;
+        $("jdFallback").hidden = true;
+        ["saveCoverLetter","copyCoverLetter","printPackageDocument","openApplication","confirmSubmitted"].forEach(control => $(control).hidden = true);
+        $("packageDownloads").hidden = true;
+        setStudioOpen(true);
+        studioMessage("Reading the complete JD and creating versioned German and English CVs and cover letters...");
+        try {
+          const response = await fetch("/api/application-package", {
+            method:"POST",
+            headers:writeHeaders(),
+            body:JSON.stringify({ id, action:"prepare", jobDescription, postingUrl, scope }),
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) {
+            if (data.code === "NEEDS_JOB_DESCRIPTION") {
+              $("studioStart").hidden = true;
+              $("jdFallback").hidden = false;
+              $("openApplication").hidden = !currentApplicationJob?.url;
+              $("openApplication").href = currentApplicationJob?.url || "#";
+              studioMessage(data.details?.retrievalError || "The job page could not be read. Paste the complete job description below.", true);
+              return;
+            }
+            throw new Error(data.error || "Could not prepare the application package");
+          }
+          if (data.job) {
+            jobs = jobs.map(job => job.id === data.job.id ? { ...job, ...data.job } : job);
+            currentApplicationJob = { ...currentApplicationJob, ...data.job };
+            applicationStatusOptions();
+          }
+          showApplicationPackage(data.applicationPackage);
+          render();
+        } catch (error) {
+          studioMessage(error.message, true);
+        } finally {
+          studioGenerationInProgress = false;
+          $("generateCoverLetter").disabled = false;
+          $("generateFromUrl").disabled = false;
+          $("generateFromJd").disabled = false;
+          $("generateFromJd").textContent = "Regenerate full package from pasted JD";
+          $("generateCoverLetter").textContent = "Read JD and regenerate full package";
+        }
+      }
+      async function savePackageDocument() {
+        if (!currentApplicationJob) return;
+        studioMessage("Preserving your edits and rebuilding this version's Word document...");
+        try {
+          const response = await fetch("/api/application-package", {
+            method:"POST",
+            headers:writeHeaders(),
+            body:JSON.stringify({ id:currentApplicationJob.id, action:"save", language:currentLetterLanguage, documentType:currentPackageDocumentType, body:$("coverLetterEditor").value }),
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Could not save the document");
+          showApplicationPackage(data.applicationPackage);
+          selectDocument(currentPackageDocumentType,currentLetterLanguage);
+          studioMessage(`Your wording was preserved at ${new Date().toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" })}. A later regeneration will create a new version, not overwrite this one.`);
+        } catch (error) { studioMessage(error.message, true); }
+      }
+      async function copyPackageDocument() {
+        const editor = $("coverLetterEditor");
+        const text = editor.value.trim();
+        if (!text) return studioMessage("There is no document to copy.", true);
+        const button = $("copyCoverLetter");
+        const originalLabel = "Copy document";
+        button.disabled = true;
+        button.textContent = "Copying...";
+        try {
+          if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            editor.focus();
+            editor.select();
+            editor.setSelectionRange(0, editor.value.length);
+            if (!document.execCommand("copy")) throw new Error("Clipboard access was blocked");
+          }
+          button.textContent = "Copied";
+          const copiedType = currentPackageDocumentType === "cv" ? "CV" : currentPackageDocumentType === "remarks" ? "portal note" : "cover letter";
+          studioMessage(`${currentLetterLanguage === "de" ? "German" : "English"} ${copiedType} copied to the clipboard.`);
+        } catch {
+          button.textContent = originalLabel;
+          studioMessage("Copy was blocked by the browser. Press and hold the letter, then choose Copy.", true);
+        } finally {
+          button.disabled = false;
+          setTimeout(() => { button.textContent = originalLabel; }, 1600);
+        }
+      }
+      async function restorePackageVersion(versionNumber) {
+        if (!currentApplicationJob) return;
+        studioMessage(`Restoring version ${versionNumber} as a new version...`);
+        try {
+          const response = await fetch("/api/application-package",{ method:"POST",headers:writeHeaders(),body:JSON.stringify({ id:currentApplicationJob.id,action:"restore",versionNumber }) });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Could not restore the selected version");
+          showApplicationPackage(data.applicationPackage,`Version ${versionNumber} was restored as new version ${data.applicationPackage.currentVersion}.`);
+        } catch (error) { studioMessage(error.message,true); }
+      }
+      function printPackageDocument() {
+        const text = $("coverLetterEditor").value;
+        const popup = window.open("","_blank","noopener,noreferrer");
+        if (!popup) return studioMessage("The browser blocked the print window.",true);
+        popup.document.write(`<!doctype html><title>Print application document</title><style>@page{size:A4;margin:16mm}body{font:10.5pt/1.45 Arial,sans-serif;white-space:pre-wrap;color:#17253a}</style><body>${escapeHtml(text)}</body>`);
+        popup.document.close(); popup.focus(); popup.print();
+      }
+      async function shareJob(id, button) {
+        const job = jobs.find(item => item.id === id);
+        if (!job) return;
+        const shareUrl = applicationUrl(job);
+        const text = `${job.title} — ${job.company} · ${job.location}`;
+        const originalLabel = button.textContent;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title:`${job.title} — ${job.company}`, text, url:shareUrl });
+            button.textContent = "Shared";
+          } else {
+            const shareText = `${text}\n${shareUrl}`;
+            if (navigator.clipboard?.writeText && window.isSecureContext) await navigator.clipboard.writeText(shareText);
+            else {
+              const helper = document.createElement("textarea");
+              helper.value = shareText;
+              helper.style.position = "fixed";
+              helper.style.opacity = "0";
+              document.body.appendChild(helper);
+              helper.select();
+              if (!document.execCommand("copy")) throw new Error("Clipboard access was blocked");
+              helper.remove();
+            }
+            button.textContent = "Link copied";
+          }
+        } catch (error) {
+          if (error.name !== "AbortError") alert("Sharing was blocked. Open the original posting and copy its address.");
+        } finally {
+          setTimeout(() => { button.textContent = originalLabel; }, 1600);
+        }
+      }
+      async function confirmApplicationSubmitted() {
+        if (!currentApplicationJob || !confirm(`Confirm that you personally submitted the application to ${currentApplicationJob.company}?`)) return;
+        studioMessage("Recording the confirmed submission in SQLite and Excel...");
+        try {
+          const response = await fetch("/api/application-status", {
+            method:"POST",
+            headers:writeHeaders(),
+            body:JSON.stringify({ id:currentApplicationJob.id, applicationStatus:"Applied" }),
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Could not record the application");
+          jobs = jobs.map(job => job.id === data.job.id ? { ...job, ...data.job } : job);
+          currentApplicationJob = { ...currentApplicationJob, ...data.job };
+          applicationStatusOptions();
+          render();
+          studioMessage("Application recorded as Applied in SQLite and Excel.");
+          $("confirmSubmitted").hidden = true;
+        } catch (error) { studioMessage(error.message, true); }
+      }
+      $("closeStudio").onclick = () => setStudioOpen(false);
+      $("applicationStudio").addEventListener("click", event => { if (event.target === $("applicationStudio")) setStudioOpen(false); });
+      document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("applicationStudio").hidden) setStudioOpen(false); });
+      $("generateCoverLetter").onclick = () => prepareApplication(currentApplicationJob?.id);
+      $("generateFromUrl").onclick = () => {
+        const postingUrl = $("postingUrlInput").value.trim();
+        try {
+          const parsed = new URL(postingUrl);
+          if (!["http:","https:"].includes(parsed.protocol)) throw new Error();
+        } catch {
+          return studioMessage("Enter the complete HTTP or HTTPS link to the exact job posting.", true);
+        }
+        prepareApplication(currentApplicationJob?.id, "", postingUrl);
+      };
+      $("letterChoices").addEventListener("click", event => {
+        const button = event.target.closest("button[data-language]");
+        if (button) selectDocument(currentPackageDocumentType,button.dataset.language);
+      });
+      $("documentChoices").addEventListener("click", event => {
+        const button = event.target.closest("button[data-document-type]");
+        if (button) selectDocument(button.dataset.documentType,currentLetterLanguage);
+      });
+      $("packageControls").addEventListener("click", event => {
+        const button = event.target.closest("button[data-scope]");
+        if (button) prepareApplication(currentApplicationJob?.id,"","",button.dataset.scope);
+      });
+      $("packageHistoryBody").addEventListener("click", event => {
+        const button = event.target.closest("button[data-restore-version]");
+        if (button) restorePackageVersion(Number(button.dataset.restoreVersion));
+      });
+      $("generateFromJd").onclick = () => {
+        const jd = $("jobDescriptionInput").value.trim();
+        if (jd.length < 650) return studioMessage("Please paste the complete job description (at least 650 characters).", true);
+        prepareApplication(currentApplicationJob?.id, jd);
+      };
+      $("saveCoverLetter").onclick = savePackageDocument;
+      $("copyCoverLetter").onclick = copyPackageDocument;
+      $("downloadCvPdf").onclick = event => savePackagePdf(event.currentTarget);
+      $("downloadLetterPdf").onclick = event => savePackagePdf(event.currentTarget);
+      $("printPackageDocument").onclick = printPackageDocument;
+      $("confirmSubmitted").onclick = confirmApplicationSubmitted;
+      async function refreshJobDescription(details, force = false) {
+        if (!details || details.dataset.jdLoading === "true") return;
+        if (!force && details.dataset.hasFullJd === "true") return;
+        const id = details.dataset.jobId;
+        const status = details.querySelector(".jd-fetch-status");
+        const button = details.querySelector(".refresh-jd");
+        details.dataset.jdLoading = "true";
+        if (button) button.disabled = true;
+        if (status) status.textContent = "Retrieving and validating the exact JD…";
+        try {
+          const response = await fetch("/api/job-description", {
+            method:"POST",
+            headers:writeHeaders(),
+            body:JSON.stringify({ id })
+          });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.details?.retrievalError || data.error || "The full JD could not be retrieved");
+          jobs = jobs.map(job => job.id === data.job.id ? { ...job, ...data.job } : job);
+          render();
+          const reopened = [...document.querySelectorAll(".jd")].find(item => item.dataset.jobId === id);
+          if (reopened) {
+            reopened.open = true;
+            const nextStatus = reopened.querySelector(".jd-fetch-status");
+            if (nextStatus) nextStatus.textContent = `Full JD stored from ${data.posting.source} · ${Number(data.posting.characterCount || 0).toLocaleString()} characters`;
+          }
+        } catch (error) {
+          if (status) status.textContent = `${error.message}. If LinkedIn blocks access, use Prepare application to paste the full JD.`;
+        } finally {
+          details.dataset.jdLoading = "false";
+          if (button) button.disabled = false;
+        }
+      }
+      $("jobs").addEventListener("click", (event) => {
+        const jdRefresh = event.target.closest(".refresh-jd");
+        if (jdRefresh) {
+          const details = jdRefresh.closest(".jd");
+          refreshJobDescription(details, true);
+          return;
+        }
+        const jdSummary = event.target.closest(".jd > summary");
+        if (jdSummary) {
+          const details = jdSummary.parentElement;
+          requestAnimationFrame(() => {
+            if (details.open) refreshJobDescription(details, false);
+          });
+          return;
+        }        const commuteSummary = event.target.closest(".commute > summary");
+        if (commuteSummary) {
+          const details = commuteSummary.parentElement;
+          requestAnimationFrame(() => {
+            if (!details.open || details.dataset.mapLoaded === "true") return;
+            const slot = details.querySelector(".commute-map");
+            const query = details.dataset.mapQuery || "";
+            const iframe = document.createElement("iframe");
+            iframe.title = `Google Map for ${query}`;
+            iframe.loading = "lazy";
+            iframe.referrerPolicy = "no-referrer-when-downgrade";
+            iframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=14&output=embed`;
+            iframe.allowFullscreen = true;
+            slot.replaceChildren(iframe);
+            details.dataset.mapLoaded = "true";
+          });
+          return;
+        }
+        const share = event.target.closest(".share-job");
+        if (share) {
+          shareJob(share.dataset.jobId, share);
+          return;
+        }
+        const review = event.target.closest(".board-review");
+        if (review) {
+          const id = review.dataset.jobId;
+          setView("list");
+          requestAnimationFrame(() => document.getElementById(`job-${id}`)?.scrollIntoView({ behavior:"smooth", block:"start" }));
+          return;
+        }
+        const prepare = event.target.closest(".prepare-application");
+        if (prepare) {
+          openApplicationStudio(prepare.dataset.jobId);
+          return;
+        }
+        const button = event.target.closest(".save-comment");
+        if (!button) return;
+        saveApplicationComment(button.closest(".comment-control")?.querySelector(".application-comment-control"));
+      });
+      if (startup.get("view")) viewMode = startup.get("view");
+      setView(viewMode);
+      $("subtitle").textContent = "Opening Alex Job — preparing an automatic live-results refresh.";
+      checkAppVersion().then(() => {
+        // Start live retrieval immediately; hydrate the saved database in parallel.
+        const liveRefresh = refresh("automatic");
+        const savedDatabase = loadDatabase().then(() => {
+          if ($("refresh").disabled) $("subtitle").textContent = "Opening Alex Job — automatically refreshing live results now.";
+        });
+        return Promise.all([savedDatabase, liveRefresh]);
+      }).catch(error => $("subtitle").textContent = error.message);
+    </script>
+  </body>
+</html>
