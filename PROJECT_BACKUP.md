@@ -2,7 +2,7 @@
 
 Run `backup-project.ps1 -Source <project-directory> -Destination <backup-directory>` with PowerShell and Node.js 24 or later.
 
-Store the working project outside a cloud-synchronized directory. The backup destination must be outside the project. Register the command with the chosen scheduler every three hours.
+Store the working project outside a cloud-synchronized directory. The backup destination must be outside the project. Register the command with the chosen scheduler once daily at midnight.
 
 The script includes hidden files, Git repositories, documents, existing backups, and empty directories. External symbolic links and junctions are recorded in `_project-backup-manifest.json`; their external targets are not traversed. Recreate these links on restore, or reinstall the dependencies. Live SQLite databases in `State` use verified online snapshots instead of copying active journals. Other files are captured over the backup interval, rather than as a filesystem-wide atomic snapshot.
 
