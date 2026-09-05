@@ -6,8 +6,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\')
 $destinationRoot = [IO.Path]::GetFullPath($Destination).TrimEnd('\')
+$sqliteSnapshotTool = Join-Path $PSScriptRoot 'snapshot-sqlite.mjs'
 if ($sourceRoot -eq [IO.Path]::GetPathRoot($sourceRoot).TrimEnd('\')) { throw 'A drive root cannot be backed up with this project tool.' }
 if ($destinationRoot -eq $sourceRoot -or $destinationRoot.StartsWith($sourceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'The backup destination must be outside the project.' }
+if (-not (Test-Path -LiteralPath $sqliteSnapshotTool)) { throw "SQLite snapshot tool is missing: $sqliteSnapshotTool" }
 
 # One backup at a time, including across scheduler retries.
 $mutex = New-Object Threading.Mutex($false, 'Local\CareerCommandCenterProjectZip')
@@ -42,7 +44,7 @@ try {
     $relative = $file.FullName.Substring($sourceRoot.Length + 1)
     if ($relative -match '^State\\.*\.(sqlite|sqlite3|db)$') {
       $snapshot = Join-Path $stage ([guid]::NewGuid().ToString('N') + '.sqlite')
-      & node --input-type=module -e 'import { DatabaseSync, backup } from "node:sqlite"; const db = new DatabaseSync(process.argv[1], {readOnly:true}); try { await backup(db, process.argv[2]); } finally { db.close(); } const check = new DatabaseSync(process.argv[2], {readOnly:true}); try { if (check.prepare("PRAGMA integrity_check").get().integrity_check !== "ok") throw new Error("SQLite backup integrity check failed"); } finally { check.close(); }' $file.FullName $snapshot
+      & node $sqliteSnapshotTool $file.FullName $snapshot
       if ($LASTEXITCODE -ne 0) { throw "SQLite snapshot failed: $relative" }
       $sqliteSnapshots[$file.FullName] = $snapshot
     }
