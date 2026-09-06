@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { buildApplicationRemarks, buildResume } from './cover-letter-generator.mjs';
 
 const job = { company:'Test Employer', title:'Senior Hybrid Infrastructure Engineer', location:'Stuttgart' };
@@ -50,4 +51,10 @@ test('portal remarks stay concise, job-specific and evidence-grounded', () => {
   assert.ok(de.body.length < 700);
   assert.ok(en.body.length < 700);
   assert.equal(/salary|gehalt|start date|eintritt/i.test(`${de.body} ${en.body}`),false);
+});
+
+test('application recommendations guide without blocking user choice', async () => {
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  assert.match(html, /\["Rejected","Withdrawn","Case Closed"\]\.includes\(j\.applicationStatus\) \? " disabled" : ""/);
+  assert.doesNotMatch(html, /includes\(j\.applicationStatus\) \|\| j\.documentGenerationGate === "DO NOT GENERATE"/);
 });
