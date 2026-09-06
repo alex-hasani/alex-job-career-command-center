@@ -2368,6 +2368,33 @@
         });
         return ready;
       }
+      function useMobilePdfShare() {
+        if (navigator.userAgentData?.mobile === true) return true;
+        if (/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "")) return true;
+        return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+      }
+      async function saveDesktopPdf(file) {
+        if (typeof window.showSaveFilePicker === "function") {
+          const handle = await window.showSaveFilePicker({
+            suggestedName:file.name,
+            types:[{ description:"PDF document", accept:{ "application/pdf":[".pdf"] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(file);
+          await writable.close();
+          return true;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        const download = document.createElement("a");
+        download.href = objectUrl;
+        download.download = file.name;
+        download.hidden = true;
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl),60000);
+        return false;
+      }
       async function savePackagePdf(control) {
         const url = control.dataset.pdfUrl;
         const fileName = control.dataset.fileName;
@@ -2378,20 +2405,12 @@
         try {
           const file = preparedPdfFiles.get(url)?.file || await preparePdfFile(url,fileName);
           const shareData = { files:[file], title:file.name };
-          if (typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(shareData)) {
+          if (useMobilePdfShare() && typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(shareData)) {
             await navigator.share(shareData);
             studioMessage("The PDF was handed to your device. Choose Save to Files or another native action.");
           } else {
-            const objectUrl = URL.createObjectURL(file);
-            const download = document.createElement("a");
-            download.href = objectUrl;
-            download.download = file.name;
-            download.hidden = true;
-            document.body.appendChild(download);
-            download.click();
-            download.remove();
-            setTimeout(() => URL.revokeObjectURL(objectUrl),60000);
-            studioMessage("The PDF was sent to your browser's downloads.");
+            const usedSaveWindow = await saveDesktopPdf(file);
+            studioMessage(usedSaveWindow ? "The PDF was saved to the folder you selected." : "The PDF was sent to your browser's downloads.");
           }
         } catch (error) {
           if (error.name !== "AbortError") studioMessage(error.message || "The PDF could not be saved.",true);

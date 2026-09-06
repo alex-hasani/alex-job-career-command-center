@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('PDF buttons prepare the file before invoking the native device share flow', async () => {
+test('PDF buttons use mobile sharing and a desktop Save As window', async () => {
   const index = await readFile(new URL('./index.html', import.meta.url), 'utf8');
   const server = await readFile(new URL('./server.mjs', import.meta.url), 'utf8');
 
@@ -10,6 +10,12 @@ test('PDF buttons prepare the file before invoking the native device share flow'
   assert.match(index, /<button id="downloadLetterPdf" type="button">Save cover letter · PDF<\/button>/);
   assert.match(index, /navigator\.canShare\(shareData\)/);
   assert.match(index, /await navigator\.share\(shareData\)/);
+  assert.match(index, /navigator\.userAgentData\?\.mobile === true/);
+  assert.match(index, /useMobilePdfShare\(\) && typeof navigator\.share/);
+  assert.match(index, /window\.showSaveFilePicker/);
+  assert.match(index, /suggestedName:file\.name/);
+  assert.match(index, /await handle\.createWritable\(\)/);
+  assert.match(index, /await writable\.write\(file\)/);
   assert.match(index, /new File\(\[blob\], fileName, \{ type:"application\/pdf"/);
   assert.match(index, /download\.download = file\.name/);
   assert.match(index, /"Save cover letter · PDF",cvPdfReady/);
