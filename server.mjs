@@ -108,6 +108,7 @@ const baseDirectSources = [
   ,{ name:'Microsoft Careers', url:'https://jobs.careers.microsoft.com/global/en/search', kind:'Employer careers' }
   ,{ name:'Amazon Jobs Germany', url:'https://www.amazon.jobs/en/locations/germany', kind:'Employer careers' }
   ,{ name:'Google Careers Germany', url:'https://www.google.com/about/careers/applications/jobs/results/?location=Germany', kind:'Employer careers' }
+  ,{ name:'TEKsystems UK & Europe Jobs', url:'https://careers.teksystems.com/gb/en/search-results', kind:'Technology recruiter job board - UK and Europe' }
   ,{ name:'EURES', url:'https://eures.europa.eu/index_en', kind:'European job network' }
 ];
 async function readArray(path) {
