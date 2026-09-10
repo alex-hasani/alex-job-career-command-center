@@ -20,6 +20,8 @@ template-page-*.png
 gmail-lifecycle-evidence.json
 source-health.json
 job-sources.config.json
+gmail-oauth.config.json
+gmail-oauth-tokens.json
 State/
 Applications/
 Backups/

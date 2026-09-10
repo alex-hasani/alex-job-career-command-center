@@ -6,7 +6,7 @@
   "private": false,
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test application-package.test.mjs database-storage.test.mjs filter-logic.test.mjs pdf-download-flow.test.mjs resume-assessment.test.mjs",
+    "test": "node --test --test-force-exit application-package.test.mjs database-storage.test.mjs fast-apply.test.mjs filter-logic.test.mjs pdf-download-flow.test.mjs resume-assessment.test.mjs",
     "audit:public": "node public-release-audit.mjs"
   },
   "engines": {

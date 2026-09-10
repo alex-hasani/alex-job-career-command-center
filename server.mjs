@@ -8,6 +8,8 @@ import { basename, dirname, join, extname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { openJobDatabase } from './job-database.mjs';
 import { createCoverLetterService } from './cover-letter-generator.mjs';
+import { createFastApplyService } from './fast-apply-service.mjs';
+import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
 
@@ -33,6 +35,7 @@ const emailReconciliationRequestPath = join(workspace, 'State', 'gmail_reconcili
 mkdirSync(join(workspace, 'State'), { recursive:true });
 const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
+const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name });
 let importedTracker = { path:'', modified:0 };
 const refreshJobs = new Map();
 let databaseMigrated = false;
@@ -1272,7 +1275,7 @@ async function storeRetrievedJobDescription(job, posting, reason='job-descriptio
   return assessJob(await applicationJob(job.id));
 }
 const types = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml' };
-const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request']);
+const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send']);
 function requireCurrentClientVersion(req, url) {
   if (!versionProtectedWrites.has(url.pathname) || !['POST','PUT','PATCH','DELETE'].includes(req.method || '')) return;
   if (req.headers['x-app-version'] === appVersion) return;
@@ -1361,7 +1364,7 @@ const server = http.createServer(async (req, res) => {
         : action === 'restore'
           ? await coverLetters.restore(job, input.versionNumber)
           : await coverLetters.prepare(preparationJob, input.jobDescription || '', { scope:input.scope || 'full' });
-      if (!['save','restore'].includes(action) && suppliedPostingUrl) jobDb.updateApplication(job.id, { url:applicationPackage.job.exactPostingUrl });
+      if (!['save','restore'].includes(action) && applicationPackage.job.exactPostingUrl && applicationPackage.job.exactPostingUrl !== job.url) jobDb.updateApplication(job.id, { url:applicationPackage.job.exactPostingUrl });
       if (!['save','restore'].includes(action) && applicationPackage.posting?.text) await storeRetrievedJobDescription(preparationJob, { ...applicationPackage.posting, complete:true }, 'application-package-jd');
       jobDb.upsertApplicationPackage(job.id, applicationPackage);
       let updatedJob = await applicationJob(job.id);
@@ -1407,6 +1410,41 @@ const server = http.createServer(async (req, res) => {
       if (jobDb.getMetadata('active_saved_search_id')?.value === id) jobDb.setMetadata('active_saved_search_id', '');
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ ok:true, removed, searches:jobDb.listSavedSearches(), activeSavedSearchId:jobDb.getMetadata('active_saved_search_id')?.value || '' }));
+    }
+    if (url.pathname === '/api/gmail/status' && req.method === 'GET') {
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify(await fastApply.status()));
+    }
+    if (url.pathname === '/api/gmail/oauth/start' && req.method === 'POST') {
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ authorizationUrl:await fastApply.authorizationUrl() }));
+    }
+    if (url.pathname === '/api/gmail/oauth/callback' && req.method === 'GET') {
+      await fastApply.callback(url.searchParams.get('code'),url.searchParams.get('state'));
+      res.writeHead(200, {'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
+      return res.end('<!doctype html><meta name="viewport" content="width=device-width"><title>Gmail connected</title><p>Gmail is connected. You can close this window.</p><script>window.opener?.postMessage({type:"alex-job-gmail-connected"},location.origin);window.close();</script>');
+    }
+    if (url.pathname === '/api/fast-apply/preview' && req.method === 'POST') {
+      const input=await jsonBody(req), job=await applicationJob(input.id);
+      let applicationPackage=await coverLetters.readPackage(job);
+      if (!applicationPackage?.quality?.applicationReady) {
+        applicationPackage=await coverLetters.prepare(job,input.jobDescription||'',{scope:'full'});
+        jobDb.upsertApplicationPackage(job.id,applicationPackage);
+        if (applicationPackage.job.exactPostingUrl && applicationPackage.job.exactPostingUrl !== job.url) jobDb.updateApplication(job.id,{url:applicationPackage.job.exactPostingUrl});
+        if (applicationPackage.posting?.text) await storeRetrievedJobDescription(job,{...applicationPackage.posting,complete:true},'fast-apply-jd');
+      }
+      const preview=await fastApply.preview(job,applicationPackage,input.language||'',input.recipient||'');
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,preview,applicationPackage}));
+    }
+    if (url.pathname === '/api/fast-apply/send' && req.method === 'POST') {
+      const input=await jsonBody(req), job=await applicationJob(input.id), applicationPackage=await coverLetters.readPackage(job);
+      if (!applicationPackage?.quality?.applicationReady) throw new Error('Prepare and review the application package before sending');
+      const sent=await fastApply.send(job,applicationPackage,input);
+      const updatedJob=await updateApplicationStatus(job.id,'Applied');
+      jobDb.setMetadata('last_fast_apply_send',JSON.stringify({...sent,jobId:job.id}));
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,sent,job:updatedJob}));
     }
     if (url.pathname === '/api/sync-excel' && req.method === 'POST') {
       const result = await syncExcelMirror('manual-sync');

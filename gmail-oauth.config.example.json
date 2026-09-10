@@ -1,0 +1,5 @@
+{
+  "clientId": "PASTE_GOOGLE_OAUTH_WEB_CLIENT_ID",
+  "clientSecret": "PASTE_GOOGLE_OAUTH_WEB_CLIENT_SECRET",
+  "redirectUri": "https://YOUR-APP-HOST/api/gmail/oauth/callback"
+}

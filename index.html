@@ -656,6 +656,11 @@
       .package-downloads h3 { margin:0 0 10px; font-size:13px; }
       .package-download-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
       .package-download-grid a,.package-download-grid button { min-width:0; min-height:44px; display:flex; align-items:center; justify-content:center; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--ink); font-size:12px; font-weight:800; line-height:1.25; text-align:center; text-decoration:none; overflow-wrap:anywhere; }
+      .fast-apply { margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--soft); }
+      .fast-apply h3 { margin:0 0 6px; font-size:15px; }
+      .fast-apply-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+      .fast-apply-actions button { min-height:44px; }
+      .fast-apply-attachments { margin:8px 0 0; padding-left:20px; overflow-wrap:anywhere; }
       .studio-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; min-width:0; gap:8px; margin-top:14px; padding:14px 0 max(2px,env(safe-area-inset-bottom)); overflow:visible; border-top:1px solid var(--line); background:transparent; }
       .studio-actions button,.studio-actions a { min-width:0; max-width:100%; min-height:42px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px; padding:8px 12px; background:var(--card); color:var(--ink); font-weight:800; text-decoration:none; }
       .studio-actions .success { grid-column:1 / -1; }
@@ -690,7 +695,7 @@
         .studio-actions { grid-template-columns:1fr; padding-left:0; padding-right:0; }
         .studio-actions button,.studio-actions a { width:100%; }
         .studio-actions .success { grid-column:auto; }
-        .package-download-grid { grid-template-columns:1fr; }
+        .package-download-grid,.fast-apply-actions { grid-template-columns:1fr; }
         .document-choices { grid-template-columns:1fr; }
         #packageDiffBody dl { display:block; }
         #packageDiffBody dt { margin-top:9px; font-size:12px; }
@@ -1469,6 +1474,15 @@
                 <button id="downloadLetterPdf" type="button">Save cover letter · PDF</button>
               </div>
             </section>
+            <section class="fast-apply" id="fastApplyPanel" hidden>
+              <h3>Fast Apply · Gmail preview</h3>
+              <p class="muted" id="fastApplyStatus">Nothing will be sent until you review this preview and press Send with Gmail.</p>
+              <div class="studio-field"><label for="fastApplyRecipient">Recruiter / application email</label><input id="fastApplyRecipient" type="email" autocomplete="email" placeholder="Verified recipient required"></div>
+              <div class="studio-field"><label for="fastApplySubject">Subject</label><input id="fastApplySubject" maxlength="300"></div>
+              <div class="studio-field"><label for="fastApplyBody">Email message</label><textarea id="fastApplyBody" maxlength="5000" rows="9"></textarea></div>
+              <b>PDF attachments</b><ul class="fast-apply-attachments" id="fastApplyAttachments"></ul>
+              <div class="fast-apply-actions"><button id="connectGmail" type="button">Connect Gmail</button><button class="success" id="sendFastApply" type="button">Send with Gmail</button></div>
+            </section>
             <footer class="studio-actions">
               <button id="saveCoverLetter" type="button" hidden>Save my edits</button>
               <button id="copyCoverLetter" type="button" hidden>Copy selected document</button>
@@ -1873,7 +1887,7 @@
           <div class="evidence"><b>Match evidence</b><p>${j.origin === "agent" ? "Verified strengths are separated from gaps and practical constraints. Adjust Match weighting in Filters to personalise this score." : "Only skills explicitly detected in the title or source description count toward this discovery score."}</p><div class="proof">${strengths.length ? strengths.map(x => `<span>✓ ${escapeHtml(x)}</span>`).join("") : "<span>Title alignment only — review the source.</span>"}</div></div>
           <details class="commute" data-job-id="${escapeHtml(j.id)}" data-map-query="${escapeHtml(destination)}"><summary>Google Map and route from the configured origin</summary><div class="commute-body"><p class="commute-note"><b>Destination:</b> ${escapeHtml(destination)} · ${hasExactAddress ? "Exact address supplied by the job record." : "Street address was not supplied; Google Maps will resolve the employer and stated location. Confirm the destination before travelling."}</p><div class="commute-actions"><a href="${escapeHtml(mapSearch)}" target="_blank" rel="noopener">Open in Google Maps</a><a href="${escapeHtml(drivingRoute)}" target="_blank" rel="noopener">Driving route</a><a href="${escapeHtml(transitRoute)}" target="_blank" rel="noopener">Public transport route</a></div><div class="commute-map" aria-live="polite"><span class="muted">Map loads when this section is opened.</span></div></div></details>
           <details class="jd" data-job-id="${escapeHtml(j.id)}" data-has-full-jd="${hasFullStoredJd}"><summary>JD details and strategic assessment</summary><div class="jd-body"><div class="jd-refresh-row"><button class="refresh-jd" type="button" data-job-id="${escapeHtml(j.id)}">Refresh full JD</button><span class="jd-fetch-status muted" aria-live="polite">${hasFullStoredJd ? `Stored full JD · ${escapeHtml(j.jdSource || "verified source")}` : "Open this section to retrieve the full JD."}</span></div><div class="detail-grid"><span><b>Role track</b>${escapeHtml(j.track || "Not stated")}</span><span><b>Employment</b>${escapeHtml(j.employment || j.workType || "Not stated")}</span><span><b>Recruiter/contact</b>${escapeHtml(j.recruiterContact || "Not listed")}</span><span><b>Open status</b>${escapeHtml(j.openStatus || j.availabilityStatus || "Not stated")}</span><span><b>Salary basis</b>${escapeHtml(j.salaryAssessment?.basis || j.salaryBasis || "Not disclosed")}</span><span><b>Recommended CV</b>${escapeHtml(j.recommendedCvBase || "Use verified base CV")}</span><span><b>Checked</b>${checkedAt ? new Date(checkedAt).toLocaleString("en-GB") : "During application preparation"}</span><span><b>Tracker location</b>${escapeHtml(j.trackerSheet ? `${j.trackerSheet}, row ${j.trackerRow}` : "SQLite and Excel live-results sheet")}</span></div><b>${hasFullStoredJd ? "Full JD / stored snapshot" : "JD retrieval status"}</b><p class="jd-snapshot">${detail}</p><b>Requirement-evidence matrix</b><p>${escapeHtml(j.resumeVerdict || "Assessment is based only on the available JD and approved resume evidence.")}</p>${comparison.length ? `<div class="comparison-table">${comparison.map(item => `<div><b>${escapeHtml(item.requirement)}</b><span>${escapeHtml(item.matchType || item.assessment)}</span><p>${escapeHtml(item.candidateEvidence || item.evidence)}</p><div class="matrix-meta"><small>${escapeHtml(item.importance || "Importance unclear")}</small><small>${escapeHtml(item.evidenceRecency || "Recency unknown")}</small><small>${escapeHtml(item.evidenceDepth || "Depth unknown")}</small><small>${escapeHtml(item.confidence || "Confidence unknown")}</small><small>${escapeHtml(item.risk || "Risk not assessed")}</small></div></div>`).join("")}</div>` : ""}<b>Why it fits — evidence-backed</b><ul class="assessment-list">${resumeStrengths.length ? resumeStrengths.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No verified strength was detected from the available JD text.</li>"}</ul><b>Main risks / gaps</b><ul class="assessment-list">${gaps.length ? gaps.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No major gap detected from the available JD; confirm depth, recency and employer-specific tools.</li>"}</ul>${j.cvAngle ? `<b>Suggested CV and application angle</b><p>${escapeHtml(j.cvAngle)}</p>` : ""}<b>${readinessPlan.length > 7 ? "Two-week" : "One-week"} interview readiness plan</b><div class="readiness-table-wrap"><table class="readiness-table"><thead><tr><th>Day</th><th>Focus</th><th>Daily action</th><th>Deliverable</th><th>Time</th></tr></thead><tbody>${readinessRows}</tbody></table></div>${constraints.length ? `<b>Practical checks</b><ul class="assessment-list">${constraints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}${requirements.length ? `<b>Application requirements</b><ul class="assessment-list">${requirements.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}</div></details>
-          <div class="job-actions"><label class="status-control">Application status <select class="application-status-control" data-job-id="${escapeHtml(j.id)}">${statuses.map(s => `<option${s === j.applicationStatus ? " selected" : ""}>${s}</option>`).join("")}</select></label><label class="comment-control"><span>Application comment</span><textarea class="application-comment-control" data-job-id="${escapeHtml(j.id)}" maxlength="2000" placeholder="Why I applied or skipped it, follow-up plan, interview notes…">${escapeHtml(j.applicationComment || "")}</textarea><button class="save-comment" type="button" data-job-id="${escapeHtml(j.id)}">Save note</button><span class="comment-save-state" aria-live="polite"></span></label><button class="prepare-application" type="button" data-job-id="${escapeHtml(target.id)}"${["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) ? " disabled" : ""}>${j.documentGenerationGate === "CONFIRM FIRST" ? "Review stretch application" : target.applicationPackage ? "Regenerate package" : "Prepare application"}</button><span class="muted">${escapeHtml(sourceCheck)} · ${escapeHtml(j.documentGenerationGate || "Review document need")}</span></div>
+          <div class="job-actions"><label class="status-control">Application status <select class="application-status-control" data-job-id="${escapeHtml(j.id)}">${statuses.map(s => `<option${s === j.applicationStatus ? " selected" : ""}>${s}</option>`).join("")}</select></label><label class="comment-control"><span>Application comment</span><textarea class="application-comment-control" data-job-id="${escapeHtml(j.id)}" maxlength="2000" placeholder="Why I applied or skipped it, follow-up plan, interview notes…">${escapeHtml(j.applicationComment || "")}</textarea><button class="save-comment" type="button" data-job-id="${escapeHtml(j.id)}">Save note</button><span class="comment-save-state" aria-live="polite"></span></label><button class="prepare-application" type="button" data-job-id="${escapeHtml(target.id)}"${["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) ? " disabled" : ""}>${j.documentGenerationGate === "CONFIRM FIRST" ? "Review stretch application" : target.applicationPackage ? "Regenerate package" : "Prepare application"}</button><button class="fast-apply-button" type="button" data-job-id="${escapeHtml(target.id)}">Fast Apply</button><span class="muted">${escapeHtml(sourceCheck)} · ${escapeHtml(j.documentGenerationGate || "Review document need")}</span></div>
           <div class="application-timing"><span><b>Applied:</b> ${escapeHtml(formatDateTime(j.appliedAt, "Date not recorded"))}</span><span><b>Status last changed:</b> ${escapeHtml(formatDateTime(j.applicationStatusChangedAt, "Timestamp not recorded"))}</span>${history.length ? `<details class="status-history"><summary>View status history (${history.length})</summary><ol>${history.map(event => `<li>${escapeHtml(formatDateTime(event.changedAt))}: ${escapeHtml(event.previousStatus || "—")} → ${escapeHtml(event.newStatus)}${event.source ? ` · ${escapeHtml(event.source)}` : ""}</li>`).join("")}</ol></details>` : ""}</div>
           <div class="foot"><span>${escapeHtml(j.salaryText || money(j.salaryMax || j.salaryMin))}</span><span>${j.posted ? `Posted ${new Date(j.posted).toLocaleDateString("en-GB")}` : j.foundAt ? `Found ${new Date(j.foundAt).toLocaleDateString("en-GB")}` : "Date not stated"}</span></div>
         </article>`;
@@ -2310,7 +2324,7 @@
           saveApplicationComment(control);
         }
       });
-      let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false;
+      let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false, fastApplyMode = false;
       const preparedPdfFiles = new Map();
       function setStudioOpen(open) {
         const studio = $("applicationStudio");
@@ -2493,6 +2507,8 @@
         $("studioTitle").textContent = currentApplicationJob.title;
         $("studioCompany").textContent = `${currentApplicationJob.company} · ${currentApplicationJob.location}`;
         currentApplicationPackage = null;
+        fastApplyMode = false;
+        $("fastApplyPanel").hidden = true;
         currentLetterLanguage = "de";
         currentPackageDocumentType = "cv";
         $("studioStart").hidden = false;
@@ -2670,6 +2686,54 @@
           setTimeout(() => { button.textContent = originalLabel; }, 1600);
         }
       }
+      async function loadFastApplyPreview(recipient = "") {
+        if (!currentApplicationJob || !currentApplicationPackage) return;
+        $("fastApplyPanel").hidden = false;
+        $("fastApplyStatus").textContent = "Preparing the editable email preview…";
+        const response = await fetch("/api/fast-apply/preview",{method:"POST",headers:writeHeaders(),body:JSON.stringify({id:currentApplicationJob.id,language:currentLetterLanguage,recipient})});
+        const data = await readWriteResponse(response);
+        if (!response.ok) throw new Error(data.error || "Fast Apply preview could not be prepared");
+        currentApplicationPackage = data.applicationPackage;
+        const preview = data.preview;
+        $("fastApplyRecipient").value = preview.recipient || "";
+        $("fastApplySubject").value = preview.subject;
+        $("fastApplyBody").value = preview.body;
+        $("fastApplyAttachments").innerHTML = preview.attachments.map(item => `<li>${escapeHtml(item.fileName)}</li>`).join("");
+        $("connectGmail").hidden = preview.gmail.connected;
+        $("sendFastApply").disabled = !preview.gmail.connected;
+        $("fastApplyStatus").textContent = preview.recipient
+          ? `Recipient from ${preview.recipientSource}. Gmail ${preview.gmail.connected ? "connected as " + preview.gmail.email : "must be connected before sending"}.`
+          : "No verified recruiter email was found. Enter the address from the job description, then review every field.";
+      }
+      async function startFastApply(id) {
+        await openApplicationStudio(id);
+        fastApplyMode = true;
+        if (!currentApplicationPackage) await prepareApplication(id);
+        if (currentApplicationPackage) {
+          try { await loadFastApplyPreview(); }
+          catch (error) { $("fastApplyPanel").hidden = false; $("fastApplyStatus").textContent = error.message; studioMessage(error.message,true); }
+        }
+      }
+      async function connectFastApplyGmail() {
+        try {
+          const response=await fetch("/api/gmail/oauth/start",{method:"POST",headers:writeHeaders(),body:"{}"});
+          const data=await readWriteResponse(response);
+          if(!response.ok)throw new Error(data.error || "Gmail connection could not start");
+          window.open(data.authorizationUrl,"alexJobGmail","popup,width=560,height=720");
+        } catch(error) { studioMessage(error.message,true); }
+      }
+      async function sendFastApply() {
+        if (!currentApplicationJob || !confirm(`Send this reviewed application email now to ${$("fastApplyRecipient").value.trim()} with the listed PDF attachments?`)) return;
+        $("sendFastApply").disabled=true;$("fastApplyStatus").textContent="Sending the reviewed email through Gmail…";
+        try {
+          const response=await fetch("/api/fast-apply/send",{method:"POST",headers:writeHeaders(),body:JSON.stringify({id:currentApplicationJob.id,to:$("fastApplyRecipient").value,subject:$("fastApplySubject").value,body:$("fastApplyBody").value,language:currentLetterLanguage,confirmed:true})});
+          const data=await readWriteResponse(response);
+          if(!response.ok)throw new Error(data.error || "Gmail did not send the email");
+          jobs=jobs.map(job=>job.id===data.job.id?{...job,...data.job}:job);currentApplicationJob={...currentApplicationJob,...data.job};render();
+          $("fastApplyStatus").textContent=`Sent to ${data.sent.to} at ${new Date(data.sent.sentAt).toLocaleString("en-GB")}. Application recorded as Applied.`;
+          $("confirmSubmitted").hidden=true;
+        } catch(error) { $("sendFastApply").disabled=false;$("fastApplyStatus").textContent=error.message;studioMessage(error.message,true); }
+      }
       async function confirmApplicationSubmitted() {
         if (!currentApplicationJob || !confirm(`Confirm that you personally submitted the application to ${currentApplicationJob.company}?`)) return;
         studioMessage("Recording the confirmed submission in SQLite and Excel...");
@@ -2705,7 +2769,10 @@
       };
       $("letterChoices").addEventListener("click", event => {
         const button = event.target.closest("button[data-language]");
-        if (button) selectDocument(currentPackageDocumentType,button.dataset.language);
+        if (button) {
+          selectDocument(currentPackageDocumentType,button.dataset.language);
+          if (fastApplyMode) loadFastApplyPreview($("fastApplyRecipient").value).catch(error => studioMessage(error.message,true));
+        }
       });
       $("documentChoices").addEventListener("click", event => {
         const button = event.target.closest("button[data-document-type]");
@@ -2730,6 +2797,9 @@
       $("downloadLetterPdf").onclick = event => savePackagePdf(event.currentTarget);
       $("printPackageDocument").onclick = printPackageDocument;
       $("confirmSubmitted").onclick = confirmApplicationSubmitted;
+      $("connectGmail").onclick = connectFastApplyGmail;
+      $("sendFastApply").onclick = sendFastApply;
+      window.addEventListener("message",event => { if(event.origin === location.origin && event.data?.type === "alex-job-gmail-connected" && fastApplyMode) loadFastApplyPreview($("fastApplyRecipient").value).catch(error => studioMessage(error.message,true)); });
       async function refreshJobDescription(details, force = false) {
         if (!details || details.dataset.jdLoading === "true") return;
         if (!force && details.dataset.hasFullJd === "true") return;
@@ -2806,6 +2876,8 @@
           requestAnimationFrame(() => document.getElementById(`job-${id}`)?.scrollIntoView({ behavior:"smooth", block:"start" }));
           return;
         }
+        const fastApply = event.target.closest(".fast-apply-button");
+        if (fastApply) { startFastApply(fastApply.dataset.jobId); return; }
         const prepare = event.target.closest(".prepare-application");
         if (prepare) {
           openApplicationStudio(prepare.dataset.jobId);

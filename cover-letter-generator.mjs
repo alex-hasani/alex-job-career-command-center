@@ -295,6 +295,47 @@ function safePostingUrl(value) {
   return url;
 }
 
+export function extractGoogleResultUrls(html) {
+  const urls = [];
+  for (const match of String(html || "").matchAll(/href=["\x27]([^"\x27]+)["\x27]/gi)) {
+    const href = decodeHtml(match[1]);
+    let value = "";
+    try {
+      if (href.startsWith("/url?")) value = new URL(href, "https://www.google.com").searchParams.get("q") || "";
+      else if (/^https?:\/\//i.test(href)) value = href;
+      if (!value) continue;
+      const url = safePostingUrl(value);
+      if (/(^|\.)google\.|googleusercontent\.|gstatic\.|youtube\.|facebook\.|instagram\.|tiktok\./i.test(url.hostname)) continue;
+      if (!urls.some(item => item.href === url.href)) urls.push(url);
+    } catch {}
+  }
+  return urls.slice(0, 8);
+}
+
+async function discoverPostingViaGoogle(job) {
+  const query = [`"${cleanText(job.company)}"`, `"${cleanText(job.title)}"`, "jobs OR karriere OR careers"].join(" ");
+  const response = await fetch(`https://www.google.com/search?${new URLSearchParams({ q:query, num:"8", filter:"0" })}`, {
+    redirect:"follow", signal:AbortSignal.timeout(15000),
+    headers:{ "accept":"text/html", "accept-language":"de-DE,de;q=0.9,en;q=0.8", "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36" }
+  });
+  if (!response.ok) throw new Error(`Google search returned HTTP ${response.status}`);
+  const candidates = extractGoogleResultUrls((await response.text()).slice(0, 1000000));
+  if (!candidates.length) throw new Error("Google did not expose a usable result");
+  const errors = [];
+  for (const url of candidates.slice(0, 5)) {
+    const attempts = /(?:^|\.)linkedin\.com$/i.test(url.hostname) ? [fetchLinkedInGuestPosting, fetchReaderPosting, fetchDirectPosting] : [fetchDirectPosting, fetchReaderPosting];
+    for (const attempt of attempts) {
+      try {
+        const result = await attempt(url);
+        if (!isCompleteJobDescription(result.text, MIN_RETRIEVED_JD_LENGTH)) throw new Error("incomplete JD");
+        if (!postingMatchesJob(result.text, job)) throw new Error("company or role mismatch");
+        return { text:result.text, url:url.href };
+      } catch (error) { errors.push(`${url.hostname}: ${error.message}`); }
+    }
+  }
+  throw new Error(errors.slice(0, 8).join(" | ") || "no verified matching posting was found");
+}
+
 async function retrievePosting(job, suppliedDescription='') {
   const supplied = cleanText(suppliedDescription).slice(0, MAX_JD_LENGTH);
   if (supplied && !isCompleteJobDescription(supplied, MIN_PASTED_JD_LENGTH)) {
@@ -303,6 +344,7 @@ async function retrievePosting(job, suppliedDescription='') {
   }
   if (supplied) return { text:supplied, source:'user-pasted full job description', retrievedAt:new Date().toISOString(), complete:true };
   const existing = cleanText([job.description, job.jdSnapshot].filter(Boolean).join(' ')).slice(0, MAX_JD_LENGTH);
+  const errors = [];
   let retrievalError = '';
   if (job.url) {
     const url = safePostingUrl(job.url);
@@ -313,15 +355,31 @@ async function retrievePosting(job, suppliedDescription='') {
       : preferReader
         ? [fetchReaderPosting, fetchDirectPosting, fetchBrowserPosting]
         : [fetchDirectPosting, fetchReaderPosting, fetchBrowserPosting];
-    const errors = [];
     for (const attempt of attempts) {
       try {
         const result = await attempt(url);
         if (!isCompleteJobDescription(result.text, MIN_RETRIEVED_JD_LENGTH)) throw new Error('page did not expose both complete responsibilities and requirements');
         if (!postingMatchesJob(result.text, job)) throw new Error('page content did not match the selected company or role');
-        return { text:result.text, source:result.method === 'linkedin-guest' ? 'exact LinkedIn guest posting' : result.method === 'reader' ? 'exact posting via public text reader' : result.method === 'browser' ? 'exact posting rendered in local browser' : 'exact posting page content', retrievedAt:new Date().toISOString(), complete:true };
+        return { text:result.text, url:url.href, source:result.method === 'linkedin-guest' ? 'exact LinkedIn guest posting' : result.method === 'reader' ? 'exact posting via public text reader' : result.method === 'browser' ? 'exact posting rendered in local browser' : 'exact posting page content', retrievedAt:new Date().toISOString(), complete:true };
       } catch (error) { errors.push(`${attempt === fetchLinkedInGuestPosting ? 'linkedin-guest' : attempt === fetchReaderPosting ? 'reader' : attempt === fetchBrowserPosting ? 'browser' : 'direct'}: ${error.message}`); }
     }
+    try {
+      const result = await discoverPostingViaGoogle(job);
+      return { text:result.text, url:result.url, source:'exact posting discovered via Google', retrievedAt:new Date().toISOString(), complete:true };
+    } catch (error) { errors.push(`google: ${error.message}`); }
+    try {
+      const federalText = await fetchFederalPosting(job);
+      if (!isCompleteJobDescription(federalText, MIN_RETRIEVED_JD_LENGTH)) throw new Error('federal record did not contain complete responsibilities and requirements');
+      if (!postingMatchesJob(federalText, job)) throw new Error('federal record did not match the selected company or role');
+      return { text:federalText, source:'exact posting via federal job database', retrievedAt:new Date().toISOString(), complete:true };
+    } catch (error) { errors.push(`federal: ${error.message}`); }
+    retrievalError = errors.join(' | ');
+  }
+  if (!job.url) {
+    try {
+      const result = await discoverPostingViaGoogle(job);
+      return { text:result.text, url:result.url, source:'exact posting discovered via Google', retrievedAt:new Date().toISOString(), complete:true };
+    } catch (error) { errors.push(`google: ${error.message}`); }
     try {
       const federalText = await fetchFederalPosting(job);
       if (!isCompleteJobDescription(federalText, MIN_RETRIEVED_JD_LENGTH)) throw new Error('federal record did not contain complete responsibilities and requirements');
@@ -762,7 +820,6 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
   async function prepare(job, suppliedDescription='', options={}) {
     await assertEvidenceReady();
     if (!job) throw new Error('A saved job record is required before preparing an application');
-    if (!job.url && !cleanText(suppliedDescription)) throw new Error('Add the exact posting URL or paste the complete job description before preparing an application');
     const posting = await retrievePosting(job, suppliedDescription);
     if (!posting.complete) {
       const error = new Error('The complete job description could not be retrieved. Paste the JD into the preparation window and try again.');
@@ -782,7 +839,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     data = {
       version:3,
       packageKey:key,
-      job:{ id:job.id, title:job.title, company:job.company, location:job.location, exactPostingUrl:job.url, verifiedAt:job.lastVerifiedAt || null },
+      job:{ id:job.id, title:job.title, company:job.company, location:job.location, exactPostingUrl:posting.url || job.url || '', verifiedAt:job.lastVerifiedAt || null },
       posting,
       currentVersion:versionNumber,
       versions:[...priorVersions,next],
@@ -900,7 +957,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
   function publicPackage(data) {
     const active = current(data);
     active.documents.remarks ||= { de:buildApplicationRemarks(data.job,data.posting,'de'), en:buildApplicationRemarks(data.job,data.posting,'en') };
-    const trustedFullSource = /^(exact LinkedIn guest posting|exact posting structured JD|exact posting main JD content|exact posting page content|exact posting rendered in local browser|exact posting via public text reader|exact posting via federal job database|user-pasted full job description|stored full tracker JD snapshot)$/.test(data.posting.source);
+    const trustedFullSource = /^(exact LinkedIn guest posting|exact posting structured JD|exact posting main JD content|exact posting page content|exact posting rendered in local browser|exact posting via public text reader|exact posting via federal job database|exact posting discovered via Google|user-pasted full job description|stored full tracker JD snapshot)$/.test(data.posting.source);
     const jdComplete = trustedFullSource && isCompleteJobDescription(data.posting.text,data.posting.source === 'user-pasted full job description' ? MIN_PASTED_JD_LENGTH : MIN_RETRIEVED_JD_LENGTH);
     const documents = {
       ...Object.fromEntries(['cv','coverLetter'].map(type => [type,Object.fromEntries(['de','en'].map(language => [language,publicDocument(data.job.id,active,type,language,active.documents[type][language])]))])),

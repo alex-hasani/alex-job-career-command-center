@@ -14,6 +14,7 @@ This repository is designed for technical review. All candidate details, employe
 - Application lifecycle history with preserved event timestamps
 - German and English CV and cover-letter generation from one evidence map
 - Versioned application packages, editable previews, DOCX/PDF exports, and restoration of earlier versions
+- Optional Fast Apply email preview with reviewed PDF attachments and explicit Gmail send confirmation
 - Strict separation of verified experience, transferable evidence, learning, gaps, and blockers
 - Local-only default binding and ignored runtime/private data
 
@@ -75,7 +76,9 @@ See [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and [PRODUCTION_BASELI
 
 ## Scope and safety
 
-The application prepares and tracks application work. It does not submit applications or send email. Generated documents require human review before use. Salary estimates, employer risk, and market signals must remain labelled by evidence type and should not be presented as confirmed facts without a source.
+The application prepares and tracks application work and does not submit external forms. Fast Apply can send only after the user reviews an editable recipient, subject, body, and two generated PDF attachments, connects the matching Gmail account with the `gmail.send` scope, confirms in the browser, and presses the final send button. It cannot read Gmail. Generated documents require human review before use. Salary estimates, employer risk, and market signals must remain labelled by evidence type and should not be presented as confirmed facts without a source.
+
+Local Gmail setup is optional. Copy `gmail-oauth.config.example.json` to the ignored `gmail-oauth.config.json`, create a Google OAuth Web Application, and configure the exact local callback URL ending in `/api/gmail/oauth/callback`. Client secrets and refresh tokens are runtime-only and must never be committed.
 
 ## License
 
