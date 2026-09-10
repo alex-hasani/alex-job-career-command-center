@@ -5,6 +5,8 @@ import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 const databasePath = resolve(process.argv[2] || '../State/job_search.sqlite');
 const statePath = resolve(process.argv[3] || '../State/cv_command_center_state.json');
 const evidencePath = resolve(process.argv[4] || './gmail-lifecycle-evidence.json');
+const incrementalCount = Number.parseInt(process.argv[5] || '', 10);
+const incrementalMode = Number.isInteger(incrementalCount) && incrementalCount > 0;
 const db = openJobDatabase(databasePath);
 
 // The public repository never contains mailbox evidence. A local operator may
@@ -17,6 +19,7 @@ try {
 } catch (error) {
   if (error.code !== 'ENOENT') throw error;
 }
+if (incrementalMode) evidence = evidence.slice(-incrementalCount);
 
 const existing = new Map(db.listJobs({ includeInactive:true }).map(job => [job.id, job]));
 for (const item of evidence) {
@@ -114,4 +117,4 @@ try {
   if (error.code !== 'ENOENT') throw new Error(`SQLite was updated, but local state reconciliation failed: ${error.message}`);
 }
 
-console.log(JSON.stringify({ updated:evidence.length, stateUpdated }, null, 2));
+console.log(JSON.stringify({ mode:incrementalMode ? 'incremental' : 'full', processed:evidence.length, stateUpdated }, null, 2));
