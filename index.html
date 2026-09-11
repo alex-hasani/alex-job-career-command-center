@@ -2699,11 +2699,14 @@
         $("fastApplySubject").value = preview.subject;
         $("fastApplyBody").value = preview.body;
         $("fastApplyAttachments").innerHTML = preview.attachments.map(item => `<li>${escapeHtml(item.fileName)}</li>`).join("");
-        $("connectGmail").hidden = preview.gmail.connected;
-        $("sendFastApply").disabled = !preview.gmail.connected;
-        $("fastApplyStatus").textContent = preview.recipient
-          ? `Recipient from ${preview.recipientSource}. Gmail ${preview.gmail.connected ? "connected as " + preview.gmail.email : "must be connected before sending"}.`
-          : "No verified recruiter email was found. Enter the address from the job description, then review every field.";
+        const gmailReady = Boolean(preview.gmail?.configured && preview.gmail?.connected);
+        $("connectGmail").hidden = !preview.gmail?.configured || gmailReady;
+        $("sendFastApply").disabled = !gmailReady;
+        $("fastApplyStatus").textContent = !preview.gmail?.configured
+          ? "Gmail sending has not been configured for this app yet. Add the one-time Google OAuth configuration before authorizing Gmail."
+          : preview.recipient
+            ? `Recipient from ${preview.recipientSource}. Gmail ${gmailReady ? "connected as " + preview.gmail.email : "requires one-time authorization before sending"}.`
+            : "No verified recruiter email was found. Enter the address from the job description, then review every field.";
       }
       async function startFastApply(id) {
         await openApplicationStudio(id);
@@ -2715,12 +2718,22 @@
         }
       }
       async function connectFastApplyGmail() {
+        const status = $("fastApplyStatus");
+        // Open synchronously so mobile browsers do not treat OAuth as a blocked popup.
+        const popup = window.open("about:blank", "alexJobGmail", "popup,width=560,height=720");
+        if (status) status.textContent = "Opening secure Gmail authorization…";
         try {
           const response=await fetch("/api/gmail/oauth/start",{method:"POST",headers:writeHeaders(),body:"{}"});
           const data=await readWriteResponse(response);
           if(!response.ok)throw new Error(data.error || "Gmail connection could not start");
-          window.open(data.authorizationUrl,"alexJobGmail","popup,width=560,height=720");
-        } catch(error) { studioMessage(error.message,true); }
+          if (popup) popup.location.href = data.authorizationUrl;
+          else window.location.assign(data.authorizationUrl);
+        } catch(error) {
+          popup?.close();
+          const message = error.message || "Gmail authorization could not start";
+          if (status) status.textContent = message;
+          studioMessage(message,true);
+        }
       }
       async function sendFastApply() {
         if (!currentApplicationJob || !confirm(`Send this reviewed application email now to ${$("fastApplyRecipient").value.trim()} with the listed PDF attachments?`)) return;
