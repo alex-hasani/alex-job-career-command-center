@@ -2582,6 +2582,10 @@
             applicationStatusOptions();
           }
           showApplicationPackage(data.applicationPackage);
+          if (fastApplyMode) {
+            try { await loadFastApplyPreview(); }
+            catch (error) { $("fastApplyPanel").hidden = false; $("fastApplyStatus").textContent = error.message; studioMessage(error.message, true); }
+          }
           render();
         } catch (error) {
           studioMessage(error.message, true);
