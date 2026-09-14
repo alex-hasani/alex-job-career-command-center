@@ -2385,24 +2385,14 @@
         preparedPdfFiles.set(url,record);
         return record.promise;
       }
-      function warmPdfControl(control, url, fileName, label, waitFor = Promise.resolve()) {
+      function warmPdfControl(control, url, fileName, label) {
         control.dataset.pdfUrl = url;
         control.dataset.fileName = fileName;
         control.dataset.readyLabel = label;
-        control.disabled = true;
-        control.textContent = `Preparing ${label.replace(/^Save | · /g," ")}…`;
-        const ready = waitFor.catch(() => {}).then(() => preparePdfFile(url,fileName));
-        ready.then(() => {
-          if (control.dataset.pdfUrl !== url) return;
-          control.disabled = false;
-          control.textContent = label;
-        }).catch(error => {
-          if (control.dataset.pdfUrl !== url) return;
-          control.disabled = false;
-          control.textContent = `Retry ${label}`;
-          control.dataset.pdfError = error.message;
-        });
-        return ready;
+        delete control.dataset.pdfError;
+        control.disabled = false;
+        control.textContent = label;
+        return Promise.resolve();
       }
       function useMobilePdfShare() {
         if (navigator.userAgentData?.mobile === true) return true;
