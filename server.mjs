@@ -12,6 +12,7 @@ import { createFastApplyService } from './fast-apply-service.mjs';
 import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
+import { appendActivityEvent, readActivityEvents } from './activity-log.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -32,6 +33,8 @@ const trackerImportStatusPath = join(workspace, 'State', 'tracker_import_status.
 const liveDatabasePath = join(workspace, 'State', 'live_job_database.json');
 const sqlitePath = join(workspace, 'State', 'job_search.sqlite');
 const emailReconciliationRequestPath = join(workspace, 'State', 'gmail_reconciliation_request.json');
+const activityLogPath = join(workspace, 'State', 'app-activity-log.jsonl');
+const logActivity = event => appendActivityEvent(activityLogPath, event).catch(error => console.error('Activity log failure:', error.message));
 mkdirSync(join(workspace, 'State'), { recursive:true });
 const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
@@ -1285,6 +1288,8 @@ function requireCurrentClientVersion(req, url) {
 }
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  const auditable = url.pathname.startsWith('/api/') && req.method !== 'GET';
+  if (auditable) res.once('finish', () => logActivity({ action:req.method + ' ' + url.pathname, result:res.statusCode < 400 ? 'completed' : 'failed', detail:'HTTP ' + res.statusCode }));
   try {
     requireCurrentClientVersion(req, url);
     if (url.pathname === '/api/app-version') {
@@ -1308,6 +1313,10 @@ const server = http.createServer(async (req, res) => {
       jobDb.setMetadata('pending_email_reconciliation', JSON.stringify(request));
       res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ ok:true, request }));
+    }
+    if (url.pathname === '/api/activity-log' && req.method === 'GET') {
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ events:await readActivityEvents(activityLogPath, url.searchParams.get('limit')) }));
     }
     if (url.pathname === '/api/health') {
       const body = JSON.stringify({ ok:true, service:'Alex Job', sqlite:basename(sqlitePath), databaseStats:jobDb.stats(), excelSync:excelSyncInfo(), time:new Date().toISOString() });
@@ -1443,6 +1452,7 @@ const server = http.createServer(async (req, res) => {
       const sent=await fastApply.send(job,applicationPackage,input);
       const updatedJob=await updateApplicationStatus(job.id,'Applied');
       jobDb.setMetadata('last_fast_apply_send',JSON.stringify({...sent,jobId:job.id}));
+      logActivity({ action:'fast_apply.send', result:'sent', jobId:job.id, detail:'Gmail accepted message ' + sent.messageId });
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ok:true,sent,job:updatedJob}));
     }
@@ -1458,6 +1468,7 @@ const server = http.createServer(async (req, res) => {
     const cacheControl = /(?:index\.html|service-worker\.js)$/.test(safePath) ? 'no-cache, must-revalidate' : 'public, max-age=3600';
     res.writeHead(200, {'content-type':types[extname(safePath)] || 'application/octet-stream','cache-control':cacheControl}); res.end(file);
   } catch (error) {
+    logActivity({ level:'error', action:req.method + ' ' + url.pathname, result:'failed', detail:error.message });
     const status = ['NEEDS_JOB_DESCRIPTION','STALE_CLIENT'].includes(error.code) ? 409 : (url.pathname.startsWith('/api/') ? 500 : 404);
     res.writeHead(status, {'content-type':'application/json','cache-control':'no-store'});
     const pdfDownloadFailed = url.pathname === '/api/application-package/download' && url.searchParams.get('format') === 'pdf';

@@ -8,6 +8,20 @@ const BLOCKED=/(?:no-?reply|donotreply|privacy|datenschutz|unsubscribe|mailer-da
 const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
 const unique=values=>[...new Set(values.map(v=>v.toLowerCase()))];
 const b64url=value=>Buffer.from(value).toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+function gmailFailureMessage(status, reason='') {
+  if (status === 403 && reason === 'insufficientPermissions') return 'Gmail send permission is missing. In Google Cloud, add the Gmail send scope to the OAuth consent screen, then reconnect Gmail.';
+  if (status === 401) return 'Gmail authorization was rejected. Reconnect Gmail and approve the send permission.';
+  if (status === 403) return 'Google blocked this Gmail request. Check that the Gmail API is enabled and the account is an approved OAuth test user.';
+  if (status >= 500) return 'Gmail is temporarily unavailable. Try again shortly.';
+  return 'Google rejected the Gmail request.';
+}
+async function gmailFailure(response, fallback) {
+  let payload={}; try { payload=await response.json(); } catch {}
+  const reason=payload?.error?.errors?.[0]?.reason || payload?.error?.status || '';
+  const error=new Error(`${fallback}: ${gmailFailureMessage(response.status, reason)}`);
+  error.code=`GMAIL_${response.status}_${String(reason || 'FAILED').toUpperCase()}`;
+  return error;
+}
 function validRecipient(value) {
   const email=String(value||'').trim().toLowerCase();
   if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email) || BLOCKED.test(email)) {
@@ -79,7 +93,7 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     if(!t.refreshToken)throw new Error('Reconnect Gmail before sending');
     const c=await config();
     const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,refresh_token:t.refreshToken,grant_type:'refresh_token'}),signal:AbortSignal.timeout(20000)});
-    if(!response.ok)throw new Error('Gmail authorization expired. Reconnect Gmail.');
+    if(!response.ok)throw await gmailFailure(response,'Gmail authorization could not be refreshed');
     const grant=await response.json();t.accessToken=grant.access_token;t.expiresAt=Date.now()+(Number(grant.expires_in)||3600)*1000;
     await writeFile(tokenPath,JSON.stringify(t,null,2),'utf8');return t.accessToken;
   }
@@ -99,9 +113,9 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     for(const type of ['cv','coverLetter']){const item=await coverLetters.download(job,lang,'pdf',type,pkg.currentVersion);files.push({fileName:item.fileName,contentType:item.contentType,bytes:await readFile(item.path)});}
     const token=await accessToken(), t=await tokens();
     const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({raw:mime({from:t.email,to,subject,body,files})}),signal:AbortSignal.timeout(30000)});
-    if(!response.ok)throw new Error('Gmail did not send the application email');
+    if(!response.ok)throw await gmailFailure(response,'Gmail did not send the application email');
     const result=await response.json();return{messageId:result.id,threadId:result.threadId||'',sentAt:new Date().toISOString(),to,subject,language:lang,attachmentNames:files.map(f=>f.fileName)};
   }
   return{status,authorizationUrl,callback,preview,send};
 }
-export const fastApplyInternals={candidates,language,copy,validRecipient,mime};
+export const fastApplyInternals={candidates,language,copy,validRecipient,mime,gmailFailureMessage};

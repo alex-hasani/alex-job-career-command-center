@@ -1483,6 +1483,12 @@
               <b>PDF attachments</b><ul class="fast-apply-attachments" id="fastApplyAttachments"></ul>
               <div class="fast-apply-actions"><button id="connectGmail" type="button">Connect Gmail</button><button class="success" id="sendFastApply" type="button">Send with Gmail</button></div>
             </section>
+            <details class="package-history activity-log" id="activityLog">
+              <summary>Activity &amp; delivery log</summary>
+              <p class="muted">Private operational history. Credentials and document/email contents are never recorded.</p>
+              <button id="refreshActivityLog" type="button">Refresh log</button>
+              <div id="activityLogBody" aria-live="polite"></div>
+            </details>
             <footer class="studio-actions">
               <button id="saveCoverLetter" type="button" hidden>Save my edits</button>
               <button id="copyCoverLetter" type="button" hidden>Copy selected document</button>
@@ -2336,6 +2342,22 @@
         $("studioStatus").textContent = message;
         $("studioStatus").classList.toggle("error", error);
       }
+      function formatActivityEvent(event) {
+        const at = event.at ? new Date(event.at).toLocaleString("en-GB") : "";
+        const detail = event.detail ? ` · ${event.detail}` : "";
+        return `<div class="version-row"><span><b>${escapeHtml(event.action || "app.event")}</b> · ${escapeHtml(event.result || "completed")}${detail ? escapeHtml(detail) : ""}</span><span>${escapeHtml(at)}</span></div>`;
+      }
+      async function loadActivityLog() {
+        const body = $("activityLogBody");
+        if (!body) return;
+        body.textContent = "Loading…";
+        try {
+          const response = await fetch("/api/activity-log?limit=80", { cache:"no-store" });
+          const data = await readWriteResponse(response);
+          if (!response.ok) throw new Error(data.error || "Activity log could not be read");
+          body.innerHTML = data.events?.length ? data.events.map(formatActivityEvent).join("") : "<p class=\"muted\">No operational events recorded yet.</p>";
+        } catch (error) { body.textContent = error.message; }
+      }
       function selectedPackageDocument() {
         return currentApplicationPackage?.documents?.[currentPackageDocumentType]?.[currentLetterLanguage] || null;
       }
@@ -2522,6 +2544,7 @@
         ["saveCoverLetter","copyCoverLetter","printPackageDocument","openApplication","confirmSubmitted"].forEach(control => $(control).hidden = true);
         $("packageDownloads").hidden = true;
         setStudioOpen(true);
+        loadActivityLog();
         if (!currentApplicationJob.url) {
           $("studioStart").hidden = true;
           $("jdFallback").hidden = false;
@@ -2749,7 +2772,8 @@
           jobs=jobs.map(job=>job.id===data.job.id?{...job,...data.job}:job);currentApplicationJob={...currentApplicationJob,...data.job};render();
           $("fastApplyStatus").textContent=`Sent to ${data.sent.to} at ${new Date(data.sent.sentAt).toLocaleString("en-GB")}. Application recorded as Applied.`;
           $("confirmSubmitted").hidden=true;
-        } catch(error) { $("sendFastApply").disabled=false;$("fastApplyStatus").textContent=error.message;studioMessage(error.message,true); }
+          await loadActivityLog();
+        } catch(error) { $("sendFastApply").disabled=false;$("fastApplyStatus").textContent=error.message;studioMessage(error.message,true); await loadActivityLog(); }
       }
       async function confirmApplicationSubmitted() {
         if (!currentApplicationJob || !confirm(`Confirm that you personally submitted the application to ${currentApplicationJob.company}?`)) return;
@@ -2816,6 +2840,7 @@
       $("confirmSubmitted").onclick = confirmApplicationSubmitted;
       $("connectGmail").onclick = connectFastApplyGmail;
       $("sendFastApply").onclick = sendFastApply;
+      $("refreshActivityLog").onclick = loadActivityLog;
       window.addEventListener("message",event => { if(event.origin === location.origin && event.data?.type === "alex-job-gmail-connected" && fastApplyMode) loadFastApplyPreview($("fastApplyRecipient").value).catch(error => studioMessage(error.message,true)); });
       async function refreshJobDescription(details, force = false) {
         if (!details || details.dataset.jdLoading === "true") return;

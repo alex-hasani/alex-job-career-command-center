@@ -52,3 +52,10 @@ test('preview is editable, lists both PDFs and never requires Gmail to be connec
   assert.deepEqual(preview.attachments.map(item => item.fileName),['CV_DE.pdf','Letter_DE.pdf']);
   assert.match(preview.body,/Verified Candidate$/);
 });
+
+test('Gmail permission failures provide a precise reconnect action', () => {
+  assert.match(
+    fastApplyInternals.gmailFailureMessage(403, 'insufficientPermissions'),
+    /Gmail send permission is missing/i
+  );
+});
