@@ -3,8 +3,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { resolve } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 
-const command = process.argv[2] === 'read' ? 'read' : 'write';
-const databasePath = resolve(command === 'read' ? (process.argv[3] || '../State/job_search.sqlite') : (process.argv[2] || '../State/job_search.sqlite'));
+const requestedCommand = process.argv[2];
+const command = requestedCommand === 'read' ? 'read' : 'write';
+const explicitWrite = requestedCommand === 'write';
+const databaseArgument = command === 'read'
+  ? process.argv[3]
+  : (explicitWrite ? process.argv[3] : requestedCommand);
+const databasePath = resolve(databaseArgument || '../State/job_search.sqlite');
 
 if (command === 'read') {
   const db = new DatabaseSync(databasePath, { readOnly:true });
@@ -18,8 +23,8 @@ if (command === 'read') {
   process.exit(0);
 }
 
-const reviewedMessages = Number(process.argv[3] || 0);
-const genuineChanges = Number(process.argv[4] || 0);
+const reviewedMessages = Number((explicitWrite ? process.argv[4] : process.argv[3]) || 0);
+const genuineChanges = Number((explicitWrite ? process.argv[5] : process.argv[4]) || 0);
 const db = openJobDatabase(databasePath);
 
 const checkpoint = {
