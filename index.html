@@ -2330,7 +2330,7 @@
           saveApplicationComment(control);
         }
       });
-      let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false, fastApplyMode = false;
+      let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false, fastApplyMode = false, fastApplyDelivery = null;
       const preparedPdfFiles = new Map();
       function setStudioOpen(open) {
         const studio = $("applicationStudio");
@@ -2520,6 +2520,7 @@
         $("studioCompany").textContent = `${currentApplicationJob.company} · ${currentApplicationJob.location}`;
         currentApplicationPackage = null;
         fastApplyMode = false;
+        fastApplyDelivery = null;
         $("fastApplyPanel").hidden = true;
         currentLetterLanguage = "de";
         currentPackageDocumentType = "cv";
@@ -2703,8 +2704,19 @@
           setTimeout(() => { button.textContent = originalLabel; }, 1600);
         }
       }
+      function applyFastApplyDelivery(delivery) {
+        if (!delivery?.messageId || !delivery?.sentAt) return false;
+        fastApplyDelivery = delivery;
+        $("sendFastApply").disabled = true;
+        $("sendFastApply").textContent = "Send with Gmail · sent";
+        $("connectGmail").hidden = true;
+        $("fastApplyStatus").textContent = `Sent to ${delivery.to} at ${new Date(delivery.sentAt).toLocaleString("en-GB")}. Application recorded as Applied.`;
+        $("confirmSubmitted").hidden = true;
+        return true;
+      }
       async function loadFastApplyPreview(recipient = "") {
         if (!currentApplicationJob || !currentApplicationPackage) return;
+        const preserveDraft = Boolean(fastApplyDelivery || $("fastApplyRecipient").value || $("fastApplySubject").value || $("fastApplyBody").value);
         $("fastApplyPanel").hidden = false;
         $("fastApplyStatus").textContent = "Preparing the editable email preview…";
         const response = await fetch("/api/fast-apply/preview",{method:"POST",headers:writeHeaders(),body:JSON.stringify({id:currentApplicationJob.id,language:currentLetterLanguage,recipient})});
@@ -2712,12 +2724,16 @@
         if (!response.ok) throw new Error(data.error || "Fast Apply preview could not be prepared");
         currentApplicationPackage = data.applicationPackage;
         const preview = data.preview;
-        $("fastApplyRecipient").value = preview.recipient || "";
-        $("fastApplySubject").value = preview.subject;
-        $("fastApplyBody").value = preview.body;
+        if (!preserveDraft) {
+          $("fastApplyRecipient").value = preview.recipient || "";
+          $("fastApplySubject").value = preview.subject;
+          $("fastApplyBody").value = preview.body;
+        }
         $("fastApplyAttachments").innerHTML = preview.attachments.map(item => `<li>${escapeHtml(item.fileName)}</li>`).join("");
+        if (applyFastApplyDelivery(data.delivery)) return;
         const gmailReady = Boolean(preview.gmail?.configured && preview.gmail?.connected);
         $("connectGmail").hidden = !preview.gmail?.configured || gmailReady;
+        $("sendFastApply").textContent = "Send with Gmail";
         $("sendFastApply").disabled = !gmailReady;
         $("fastApplyStatus").textContent = !preview.gmail?.configured
           ? "Gmail sending has not been configured for this app yet. Add the one-time Google OAuth configuration before authorizing Gmail."
@@ -2758,12 +2774,22 @@
         try {
           const response=await fetch("/api/fast-apply/send",{method:"POST",headers:writeHeaders(),body:JSON.stringify({id:currentApplicationJob.id,to:$("fastApplyRecipient").value,subject:$("fastApplySubject").value,body:$("fastApplyBody").value,language:currentLetterLanguage,confirmed:true})});
           const data=await readWriteResponse(response);
-          if(!response.ok)throw new Error(data.error || "Gmail did not send the email");
+          if(!response.ok) {
+            const error = new Error(data.error || "Gmail did not send the email");
+            error.delivery = data.details?.delivery;
+            throw error;
+          }
           jobs=jobs.map(job=>job.id===data.job.id?{...job,...data.job}:job);currentApplicationJob={...currentApplicationJob,...data.job};render();
-          $("fastApplyStatus").textContent=`Sent to ${data.sent.to} at ${new Date(data.sent.sentAt).toLocaleString("en-GB")}. Application recorded as Applied.`;
-          $("confirmSubmitted").hidden=true;
+          applyFastApplyDelivery(data.delivery || data.sent);
           await loadActivityLog();
-        } catch(error) { $("sendFastApply").disabled=false;$("fastApplyStatus").textContent=error.message;studioMessage(error.message,true); await loadActivityLog(); }
+        } catch(error) {
+          if (!applyFastApplyDelivery(error.delivery)) {
+            $("sendFastApply").disabled=false;
+            $("fastApplyStatus").textContent=error.message;
+            studioMessage(error.message,true);
+          }
+          await loadActivityLog();
+        }
       }
       async function confirmApplicationSubmitted() {
         if (!currentApplicationJob || !confirm(`Confirm that you personally submitted the application to ${currentApplicationJob.company}?`)) return;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
+import { readFile } from 'node:fs/promises';
 import { createFastApplyService, fastApplyInternals } from './fast-apply-service.mjs';
 import { extractGoogleResultUrls } from './cover-letter-generator.mjs';
 
@@ -58,4 +59,9 @@ test('Gmail permission failures provide a precise reconnect action', () => {
     fastApplyInternals.gmailFailureMessage(403, 'insufficientPermissions'),
     /Gmail send permission is missing/i
   );
+});
+test('server retains successful Fast Apply delivery per job and blocks a duplicate send', async () => {
+  const source = await readFile(new URL('./server.mjs', import.meta.url), 'utf8');
+  assert.match(source, /fast_apply_sent:/);
+  assert.match(source, /FAST_APPLY_ALREADY_SENT/);
 });

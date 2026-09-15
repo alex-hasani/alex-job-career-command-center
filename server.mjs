@@ -39,6 +39,24 @@ mkdirSync(join(workspace, 'State'), { recursive:true });
 const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
 const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name });
+const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
+function readFastApplyDelivery(jobId) {
+  try {
+    const saved = jobDb.getMetadata(fastApplySendKey(jobId)) || jobDb.getMetadata('last_fast_apply_send');
+    const delivery = JSON.parse(saved || 'null');
+    if (delivery?.jobId && delivery.jobId !== jobId) return null;
+    return delivery?.messageId && delivery?.sentAt ? delivery : null;
+  } catch { return null; }
+}
+function publicFastApplyDelivery(delivery) {
+  return delivery ? {
+    messageId: delivery.messageId,
+    sentAt: delivery.sentAt,
+    to: delivery.to,
+    language: delivery.language,
+    attachmentNames: Array.isArray(delivery.attachmentNames) ? delivery.attachmentNames : [],
+  } : null;
+}
 let importedTracker = { path:'', modified:0 };
 const refreshJobs = new Map();
 let databaseMigrated = false;
@@ -1444,17 +1462,26 @@ const server = http.createServer(async (req, res) => {
       }
       const preview=await fastApply.preview(job,applicationPackage,input.language||'',input.recipient||'');
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
-      return res.end(JSON.stringify({ok:true,preview,applicationPackage}));
+      return res.end(JSON.stringify({ok:true,preview,applicationPackage,delivery:publicFastApplyDelivery(readFastApplyDelivery(job.id))}));
     }
     if (url.pathname === '/api/fast-apply/send' && req.method === 'POST') {
       const input=await jsonBody(req), job=await applicationJob(input.id), applicationPackage=await coverLetters.readPackage(job);
       if (!applicationPackage?.quality?.applicationReady) throw new Error('Prepare and review the application package before sending');
+      const priorDelivery = readFastApplyDelivery(job.id);
+      if (priorDelivery) {
+        const error = new Error('This Fast Apply email has already been sent for this job.');
+        error.code = 'FAST_APPLY_ALREADY_SENT';
+        error.details = { delivery:publicFastApplyDelivery(priorDelivery) };
+        throw error;
+      }
       const sent=await fastApply.send(job,applicationPackage,input);
+      const delivery = publicFastApplyDelivery(sent);
       const updatedJob=await updateApplicationStatus(job.id,'Applied');
-      jobDb.setMetadata('last_fast_apply_send',JSON.stringify({...sent,jobId:job.id}));
+      jobDb.setMetadata(fastApplySendKey(job.id),JSON.stringify(delivery));
+      jobDb.setMetadata('last_fast_apply_send',JSON.stringify({...delivery,jobId:job.id}));
       logActivity({ action:'fast_apply.send', result:'sent', jobId:job.id, detail:'Gmail accepted message ' + sent.messageId });
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
-      return res.end(JSON.stringify({ok:true,sent,job:updatedJob}));
+      return res.end(JSON.stringify({ok:true,sent:delivery,delivery,job:updatedJob}));
     }
     if (url.pathname === '/api/sync-excel' && req.method === 'POST') {
       const result = await syncExcelMirror('manual-sync');
