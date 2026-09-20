@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Minijob-Zentrale",
+    "canonicalDomain": "minijob-zentrale.de",
+    "reason": "Information portal rather than a useful senior permanent IT vacancy source",
+    "retiredAt": "2026-08-21T00:00:00.000Z"
+  },
+  {
+    "name": "DSV Group",
+    "url": "https://www.dsv-gruppe.de/",
+    "reason": "Corporate landing page duplicated by the searchable DSV Group Workday source",
+    "retiredAt": "2026-08-21T00:00:00.000Z"
+  },
+  {
+    "name": "service.bund.de",
+    "url": "https://www.service.bund.de/Content/DE/Stellen/Suche/Formular.html",
+    "reason": "Legacy federal search duplicated by the current searchable Karriere Bund portal",
+    "retiredAt": "2026-08-21T00:00:00.000Z"
+  },
+  {
+    "name": "JobScout24 Germany",
+    "canonicalDomain": "jobscout24.de",
+    "reason": "No current searchable German job service could be verified; the Swiss JobScout24 source remains active",
+    "retiredAt": "2026-08-21T00:00:00.000Z"
+  },
+  {
+    "name": "Honeypot",
+    "canonicalDomain": "honeypot.io",
+    "reason": "The former DACH developer marketplace is no longer verifiably operating as a current vacancy source",
+    "retiredAt": "2026-08-21T00:00:00.000Z"
+  }
+]

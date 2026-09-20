@@ -1,0 +1,6 @@
+{
+  "adzuna": { "appId": "PASTE_ADZUNA_APP_ID", "appKey": "PASTE_ADZUNA_APP_KEY" },
+  "jooble": { "apiKey": "PASTE_JOOBLE_API_KEY" },
+  "serpApi": { "apiKey": "PASTE_SERPAPI_KEY" },
+  "jsearch": { "apiKey": "PASTE_RAPIDAPI_JSEARCH_KEY" }
+}
