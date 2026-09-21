@@ -3,9 +3,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { resolve } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 
+const checkpointKey = 'last_gmail_monitor_checkpoint';
 const requestedCommand = process.argv[2];
 const command = requestedCommand === 'read' ? 'read' : 'write';
 const explicitWrite = requestedCommand === 'write';
+const markerWrite = !explicitWrite && requestedCommand !== 'read' && process.argv[3] === 'REVIEWED_MESSAGES';
 const databaseArgument = command === 'read'
   ? process.argv[3]
   : (explicitWrite ? process.argv[3] : requestedCommand);
@@ -14,7 +16,7 @@ const databasePath = resolve(databaseArgument || '../State/job_search.sqlite');
 if (command === 'read') {
   const db = new DatabaseSync(databasePath, { readOnly:true });
   try {
-    const row = db.prepare("SELECT value,updated_at AS updatedAt FROM metadata WHERE key='last_email_reconciliation'").get();
+    const row = db.prepare('SELECT value,updated_at AS updatedAt FROM metadata WHERE key=?').get(checkpointKey);
     const checkpoint = row ? { ...JSON.parse(row.value), updatedAt:row.updatedAt } : null;
     console.log(JSON.stringify({ checkpoint }, null, 2));
   } finally {
@@ -23,8 +25,10 @@ if (command === 'read') {
   process.exit(0);
 }
 
-const reviewedMessages = Number((explicitWrite ? process.argv[4] : process.argv[3]) || 0);
-const genuineChanges = Number((explicitWrite ? process.argv[5] : process.argv[4]) || 0);
+const countArgument = markerWrite ? process.argv[4] : (explicitWrite ? process.argv[4] : process.argv[3]);
+const changeArgument = markerWrite ? process.argv[5] : (explicitWrite ? process.argv[5] : process.argv[4]);
+const reviewedMessages = Number(countArgument || 0);
+const genuineChanges = Number(changeArgument ?? countArgument ?? 0);
 const db = openJobDatabase(databasePath);
 
 const checkpoint = {
@@ -35,7 +39,7 @@ const checkpoint = {
   genuineChanges
 };
 
-db.setMetadata('last_email_reconciliation', JSON.stringify(checkpoint));
+db.setMetadata(checkpointKey, JSON.stringify(checkpoint));
 const requestPath = resolve(databasePath, '..', 'gmail_reconciliation_request.json');
 try {
   const request = JSON.parse(await readFile(requestPath, 'utf8'));

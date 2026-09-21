@@ -6,14 +6,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openJobDatabase } from './job-database.mjs';
 
-test('read mode returns the Gmail checkpoint without changing it', async () => {
+test('monitor checkpoint is isolated from email reconciliation metadata', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'alex-job-gmail-checkpoint-'));
   const databasePath = join(directory, 'job_search.sqlite');
   const expected = { at:'2026-09-10T08:00:00.000Z', reviewedMessages:3, genuineChanges:1 };
   const jobDb = openJobDatabase(databasePath);
 
   try {
-    jobDb.setMetadata('last_email_reconciliation', JSON.stringify(expected));
+    jobDb.setMetadata('last_email_reconciliation', JSON.stringify({ at:'2026-09-10T09:00:00.000Z', source:'Gmail lifecycle evidence' }));
+    jobDb.setMetadata('last_gmail_monitor_checkpoint', JSON.stringify(expected));
   } finally {
     jobDb.db.close();
   }
@@ -21,15 +22,15 @@ test('read mode returns the Gmail checkpoint without changing it', async () => {
   try {
     const output = execFileSync(process.execPath, [join(import.meta.dirname, 'record-gmail-monitor-checkpoint.mjs'), 'read', databasePath], { encoding:'utf8' });
     const result = JSON.parse(output);
-    assert.deepEqual({
-      at:result.checkpoint.at,
-      reviewedMessages:result.checkpoint.reviewedMessages,
-      genuineChanges:result.checkpoint.genuineChanges
-    }, expected);
+    assert.deepEqual({ at:result.checkpoint.at, reviewedMessages:result.checkpoint.reviewedMessages, genuineChanges:result.checkpoint.genuineChanges }, expected);
 
+    execFileSync(process.execPath, [join(import.meta.dirname, 'record-gmail-monitor-checkpoint.mjs'), databasePath, 'REVIEWED_MESSAGES', '4', '2'], { encoding:'utf8' });
     const verifyDb = openJobDatabase(databasePath);
     try {
-      assert.deepEqual(JSON.parse(verifyDb.getMetadata('last_email_reconciliation').value), expected);
+      const checkpoint = JSON.parse(verifyDb.getMetadata('last_gmail_monitor_checkpoint').value);
+      assert.equal(checkpoint.reviewedMessages, 4);
+      assert.equal(checkpoint.genuineChanges, 2);
+      assert.equal(JSON.parse(verifyDb.getMetadata('last_email_reconciliation').value).source, 'Gmail lifecycle evidence');
     } finally {
       verifyDb.db.close();
     }
