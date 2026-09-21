@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(process.cwd());
 const hookDir = join(root, '.git', 'hooks');
-const body = '#!/bin/sh\\nset -eu\\nnpm run audit:public\\n';
+const body = '#!/bin/sh\nset -eu\nnpm run audit:public\n';
 for (const name of ['pre-commit', 'pre-push']) {
   const path = join(hookDir, name);
   await writeFile(path, body, { encoding:'utf8', mode:0o755 });
