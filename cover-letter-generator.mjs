@@ -538,6 +538,13 @@ function localizedSkillItems(group, language) {
   return group.items.map(item => translations.get(item) || item);
 }
 
+function matchingFamiliarities(profile, tokens) {
+  return (profile.familiarities || []).filter(item => item.terms.some(term => {
+    const normalized = term.toLowerCase();
+    return tokens.some(token => normalized.includes(token) || token.includes(normalized));
+  }));
+}
+
 export function buildResume(job, posting, language='de') {
   const profile = canonicalResumeProfile;
   const cluster = determineCluster(posting.text);
@@ -550,6 +557,7 @@ export function buildResume(job, posting, language='de') {
   const keyQualifications = allSelected.sort((a,b) => b.score - a.score).slice(0,5).map(item => item.bullet[language]);
   const requirements = salientRequirements(posting.text, language);
   const labels = resumeSectionLabels(language);
+  const familiarities = matchingFamiliarities(profile, tokens);
   const lines = [
     profile.identity.name,
     definition.headline[language],
@@ -566,6 +574,7 @@ export function buildResume(job, posting, language='de') {
     profile.earlierExperience[language],
     '', labels.development,
     ...profile.development[language].map(value => `• ${value}`),
+    ...familiarities.map(item => `• ${item[language]}`),
     '', labels.education,
     ...profile.education.map(value => `• ${value[language]}`),
     '', labels.languages,
@@ -583,7 +592,7 @@ export function buildResume(job, posting, language='de') {
     skillGroups:skills,
     roles,
     labels,
-    evidenceIds:[...new Set([...skills.flatMap(group => group.evidence), ...roles.flatMap(role => role.evidence)])],
+    evidenceIds:[...new Set([...skills.flatMap(group => group.evidence), ...roles.flatMap(role => role.evidence), ...familiarities.flatMap(item => item.evidence || [])])],
     customization:{
       cluster,
       headlineChanged:`${profile.baseHeadline[language]} → ${definition.headline[language]}`,
@@ -591,6 +600,7 @@ export function buildResume(job, posting, language='de') {
       experienceEmphasized:highlightedRoles,
       experienceCompressed:roles.filter(role => role.selectedBullets.length <= 2).map(role => role.employer),
       verifiedKeywords:verifiedTerms,
+      familiaritiesIncluded:familiarities.map(item => ({ id:item.id, label:item[language], restriction:item.restriction[language] })),
       gapsNotAdded:omittedGaps,
       matchedRequirements:requirements
     }
