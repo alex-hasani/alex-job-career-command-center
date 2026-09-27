@@ -89,7 +89,6 @@ function fastApplyPolicy() {
   return { dailyLimit:FAST_APPLY_DAILY_LIMIT, sentToday:sent, remainingToday:Math.max(0,FAST_APPLY_DAILY_LIMIT-sent-pendingFastApplyToday()), timezone:'Europe/Berlin', bcc:FAST_APPLY_BCC, recipientRule:'The application email must be explicitly listed in the verified job description.' };
 }
 async function readyToSendApplications(limit=10) {
-  await migrateDatabaseIfNeeded();
   const rows=[];
   const seenJobIds=new Set();
   const policy=fastApplyPolicy();
@@ -173,6 +172,7 @@ async function deliverPendingFastApply(pending) {
 let importedTracker = { path:'', modified:0 };
 const refreshJobs = new Map();
 let databaseMigrated = false;
+let databaseMigrationRetryAt = 0;
 let excelSyncChain = Promise.resolve();
 const profile = {
   defaultQuery: 'system administrator OR system engineer OR infrastructure engineer OR cloud administrator OR IT operations OR IT consultant',
@@ -435,10 +435,10 @@ function stateLeadToJob(lead) {
     ,updatedAt:dateValue(lead.updated_at) || new Date().toISOString()
   };
 }
-async function agentJobs() {
+async function agentJobs({ persist=true } = {}) {
   const state = await getCareerState();
   const jobs = (state.leads || []).filter(lead => lead.status !== 'deleted').map(stateLeadToJob).filter(job => job.title).map(assessJob);
-  jobDb.importAgentJobs(jobs);
+  if (persist) jobDb.importAgentJobs(jobs);
   return jobs;
 }
 async function newestTracker() {
@@ -479,19 +479,25 @@ async function safeImportTrackerIfNeeded() {
   }
 }
 async function migrateDatabaseIfNeeded() {
-  if (databaseMigrated) return;
-  jobDb.migrateStatusLabel('Closed', 'Case Closed');
-  jobDb.migrateStatusLabel('Not applied', 'Stashed');
-  jobDb.repairApplicationStateFromEvents();
-  const state = await getCareerState();
-  const needsStateMigration = (state.leads || []).some(lead => lead.application_status === 'Closed');
-  if (needsStateMigration) await persistCareerState({ ...state, leads:(state.leads || []).map(lead => lead.application_status === 'Closed' ? { ...lead, application_status:'Case Closed' } : lead) });
-  const saved = await agentJobs();
-  let cached = null;
-  try { cached = JSON.parse(await readFile(liveDatabasePath, 'utf8')); } catch {}
-  jobDb.importAgentJobs([...(cached?.jobs || []).filter(job => job.origin !== 'agent'), ...saved].map(assessJob));
-  jobDb.enrichPayloads(assessJob);
-  databaseMigrated = true;
+  if (databaseMigrated || Date.now() < databaseMigrationRetryAt) return;
+  try {
+    jobDb.migrateStatusLabel('Closed', 'Case Closed');
+    jobDb.migrateStatusLabel('Not applied', 'Stashed');
+    jobDb.repairApplicationStateFromEvents();
+    const state = await getCareerState();
+    const needsStateMigration = (state.leads || []).some(lead => lead.application_status === 'Closed');
+    if (needsStateMigration) await persistCareerState({ ...state, leads:(state.leads || []).map(lead => lead.application_status === 'Closed' ? { ...lead, application_status:'Case Closed' } : lead) });
+    const saved = await agentJobs();
+    let cached = null;
+    try { cached = JSON.parse(await readFile(liveDatabasePath, 'utf8')); } catch {}
+    jobDb.importAgentJobs([...(cached?.jobs || []).filter(job => job.origin !== 'agent'), ...saved].map(assessJob));
+    jobDb.enrichPayloads(assessJob);
+    databaseMigrated = true;
+  } catch (error) {
+    if (!/SQLITE_BUSY|database is locked/i.test(error.message || '') || !jobDb.stats().total) throw error;
+    databaseMigrationRetryAt = Date.now() + 60_000;
+    console.warn('Database maintenance deferred because another local process holds the SQLite write lock.');
+  }
 }
 function syncExcelMirror(reason = 'database-update') {
   const operation = async () => {
@@ -1213,9 +1219,10 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
   return data;
 }
 async function loadDatabase(params) {
-  await safeImportTrackerIfNeeded();
-  await migrateDatabaseIfNeeded();
-  const saved = await agentJobs();
+  // The saved SQLite state is sufficient to render the dashboard. Tracker
+  // imports and maintenance run only from explicit data workflows, never while
+  // the browser is waiting for its initial dashboard response.
+  const saved = await agentJobs({ persist:false });
   if (excelMirrorIsDue()) queueExcelMirror('scheduled-3h');
   if (databaseBackupIsDue()) queueDatabaseBackup('scheduled-3h').catch(() => {});
   let cached = null;

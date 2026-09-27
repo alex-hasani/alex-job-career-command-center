@@ -32,7 +32,9 @@ export function openJobDatabase(path) {
   const db = new DatabaseSync(path);
   db.exec(`
     PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 30000;
+    -- Keep the dashboard responsive when Excel, OneDrive, or reconciliation
+    -- briefly holds a write lock; maintenance is deferred by the caller.
+    PRAGMA busy_timeout = 750;
     -- The live database sits in OneDrive. WAL keeps -wal and -shm files open
     -- for the lifetime of the server, so OneDrive continually retries them.
     -- DELETE uses a short-lived rollback journal and releases it after commit.
