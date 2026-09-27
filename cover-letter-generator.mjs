@@ -561,7 +561,7 @@ export function buildResume(job, posting, language='de') {
   const lines = [
     profile.identity.name,
     definition.headline[language],
-    `${profile.identity.location} | ${profile.identity.phone} | ${profile.identity.email} | LinkedIn: ${profile.identity.linkedin}`,
+    `${profile.identity.location} | ${profile.identity.phone} | ${profile.identity.email} | LinkedIn: ${profile.identity.linkedin} | GitHub: ${profile.identity.github}`,
     profile.identity.workAuthorisation[language],
     '',
     summaryFor(cluster, language),

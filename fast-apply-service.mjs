@@ -60,6 +60,13 @@ function mime({from,to,bcc='',subject,body,files}) {
   lines.push(`--${boundary}--`,'');
   return b64url(lines.join('\r\n'));
 }
+function pdfAttachment(item, bytes) {
+  const fileName=String(item?.fileName || '');
+  if (item?.contentType !== 'application/pdf' || !/\.pdf$/i.test(fileName) || !Buffer.isBuffer(bytes) || bytes.length < 5 || !bytes.subarray(0,5).equals(Buffer.from('%PDF-'))) {
+    throw new Error('Application attachments must be valid PDF files. No Word document can be sent through Fast Apply.');
+  }
+  return { fileName, contentType:'application/pdf', bytes };
+}
 export function createFastApplyService({root,workspace,coverLetters,senderEmail,senderName,bccEmail=''}) {
   const configPath=join(root,'gmail-oauth.config.json');
   const tokenPath=join(workspace,'State','gmail-oauth-tokens.json');
@@ -117,7 +124,7 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     if(body.length<40||body.length>5000)throw new Error('Review the email message before sending');
     if(input.confirmed!==true)throw new Error('Final send confirmation is required');
     const lang=language(pkg.posting?.text,input.language), files=[];
-    for(const type of ['cv','coverLetter']){const item=await coverLetters.download(job,lang,'pdf',type,pkg.currentVersion);files.push({fileName:item.fileName,contentType:item.contentType,bytes:await readFile(item.path)});}
+    for(const type of ['cv','coverLetter']){const item=await coverLetters.download(job,lang,'pdf',type,pkg.currentVersion);files.push(pdfAttachment(item,await readFile(item.path)));}
     const token=await accessToken(), t=await tokens();
     const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({raw:mime({from:t.email,to,bcc:bccEmail,subject,body,files})}),signal:AbortSignal.timeout(30000)});
     if(!response.ok)throw await gmailFailure(response,'Gmail did not send the application email');
@@ -125,4 +132,4 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
   }
   return{status,authorizationUrl,callback,preview,send};
 }
-export const fastApplyInternals={candidates,postingRecipients,language,copy,validRecipient,mime,gmailFailureMessage};
+export const fastApplyInternals={candidates,postingRecipients,language,copy,validRecipient,mime,pdfAttachment,gmailFailureMessage};

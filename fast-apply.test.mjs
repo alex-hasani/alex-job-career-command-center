@@ -47,6 +47,13 @@ test('MIME payload contains both reviewed PDF attachments', () => {
   assert.match(decoded, /Bcc: candidate-copy@example\.org/);
 });
 
+test('Fast Apply rejects non-PDF attachments before Gmail delivery', () => {
+  assert.throws(
+    () => fastApplyInternals.pdfAttachment({ fileName:'CV.docx', contentType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, Buffer.from('PK\x03\x04')),
+    /valid PDF files/i
+  );
+});
+
 test('Google result extraction keeps external posting URLs and removes Google links', () => {
   const html = '<a href="/url?q=https%3A%2F%2Fcareers.example.org%2Fjobs%2F123&sa=U">Role</a><a href="https://www.google.com/preferences">Settings</a>';
   assert.deepEqual(extractGoogleResultUrls(html).map(url => url.href), ['https://careers.example.org/jobs/123']);
