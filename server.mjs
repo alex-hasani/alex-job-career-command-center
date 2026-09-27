@@ -92,39 +92,54 @@ async function readyToSendApplications(limit=10) {
   await migrateDatabaseIfNeeded();
   const rows=[];
   const seenJobIds=new Set();
+  const policy=fastApplyPolicy();
   const candidates=jobDb.listJobs({ includeInactive:false })
     .map(assessJob)
     .filter(job => ['Preparing','Not recorded'].includes(job.applicationStatus))
     .filter(job => job.lifecycleStatus !== 'applied')
+    .filter(job => job.verified !== false && /^https?:\/\//i.test(String(job.url || '')))
+    .filter(job => {
+      const title=String(job.title || '');
+      const description=String(job.description || '');
+      return /(?:\bit[ -]|systemadministr|cloud|azure|windows|linux|devops|infrastruktur|infrastructure|netzwerk|network|cyber.?security|it.?security|platform|site reliability|\bsre\b|datacenter|data center|3rd level|technical support)/i.test(title)
+        || (/\bengineer\b/i.test(title) && /(?:cloud|infrastructure|system|azure|devops|platform|network|security|linux|windows)/i.test(description));
+    })
+    .filter(job => /(?:stuttgart|ludwigsburg|esslingen|böblingen|boeblingen|waiblingen|rems|fellbach|weinstadt|sindelfingen|kornwestheim|backnang|schorndorf|winnenden|remote|hybrid|germany|deutschland)/i.test(`${job.location || ''} ${job.workAddress || ''}`))
     .sort((a,b) => (b.match || 0) - (a.match || 0));
   for (const job of candidates) {
     if (rows.length >= limit) break;
     if (seenJobIds.has(job.id)) continue;
     seenJobIds.add(job.id);
-    let applicationPackage;
-    try { applicationPackage=await coverLetters.readPackage(job); } catch { continue; }
-    if (!applicationPackage?.quality?.applicationReady) continue;
-    let preview;
-    try { preview=await fastApply.preview(job,applicationPackage,'de',''); } catch { continue; }
-    if (!preview.recipientVerified || !preview.recipient) continue;
+    let applicationPackage=null, preview=null;
+    try { applicationPackage=await coverLetters.readPackage(job); } catch {}
+    if (applicationPackage?.quality?.applicationReady) {
+      try { preview=await fastApply.preview(job,applicationPackage,'de',''); } catch {}
+    }
+    const description=clean(job.description || job.jdSnapshot || applicationPackage?.posting?.text || job.summary || '');
+    if (!description) continue;
+    const attachments=(preview?.attachments || []).map(item => ({ fileName:item.fileName }));
+    const sendReady=Boolean(applicationPackage?.quality?.applicationReady && preview?.recipientVerified && preview?.recipient && attachments.length === 2);
     rows.push({
       id:job.id,
       title:job.title,
       company:job.company,
       url:job.url,
-      description:clean(job.description || job.jdSnapshot || job.summary || ''),
+      description,
       match:Math.round(Number(job.match) || 0),
-      recipient:preview.recipient,
-      recipientSource:preview.recipientSource || 'verified job description',
-      attachments:(preview.attachments || []).map(item => ({ fileName:item.fileName })),
-      subject:preview.subject,
-      body:preview.body,
+      recipient:preview?.recipient || '',
+      recipientSource:preview?.recipientSource || '',
+      attachments,
+      attachmentStatus:sendReady ? 'Two PDF attachments ready' : applicationPackage?.quality?.applicationReady ? 'PDF package ready; recruiter email must be verified' : 'PDF package not prepared yet',
+      sendReady,
+      bcc:preview?.bcc || policy.bcc || '',
+      subject:preview?.subject || '',
+      body:preview?.body || '',
       language:'de',
       delivery:publicFastApplyDelivery(readFastApplyDelivery(job.id)),
       pending:publicFastApplyPending(pendingFastApplySends.get(job.id))
     });
   }
-  return { rows, policy:fastApplyPolicy() };
+  return { rows, readyCount:rows.filter(row => row.sendReady).length, policy };
 }
 function hasActiveFastApplySend() {
   return [...pendingFastApplySends.values()].some(pending => pending.status === 'queued' || pending.status === 'sending');
