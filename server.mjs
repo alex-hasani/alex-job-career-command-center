@@ -88,6 +88,44 @@ function fastApplyPolicy() {
   const sent=fastApplySentToday();
   return { dailyLimit:FAST_APPLY_DAILY_LIMIT, sentToday:sent, remainingToday:Math.max(0,FAST_APPLY_DAILY_LIMIT-sent-pendingFastApplyToday()), timezone:'Europe/Berlin', bcc:FAST_APPLY_BCC, recipientRule:'The application email must be explicitly listed in the verified job description.' };
 }
+async function readyToSendApplications(limit=10) {
+  await migrateDatabaseIfNeeded();
+  const rows=[];
+  const seenJobIds=new Set();
+  const candidates=jobDb.listJobs({ includeInactive:false })
+    .map(assessJob)
+    .filter(job => ['Preparing','Not recorded'].includes(job.applicationStatus))
+    .filter(job => job.lifecycleStatus !== 'applied')
+    .sort((a,b) => (b.match || 0) - (a.match || 0));
+  for (const job of candidates) {
+    if (rows.length >= limit) break;
+    if (seenJobIds.has(job.id)) continue;
+    seenJobIds.add(job.id);
+    let applicationPackage;
+    try { applicationPackage=await coverLetters.readPackage(job); } catch { continue; }
+    if (!applicationPackage?.quality?.applicationReady) continue;
+    let preview;
+    try { preview=await fastApply.preview(job,applicationPackage,'de',''); } catch { continue; }
+    if (!preview.recipientVerified || !preview.recipient) continue;
+    rows.push({
+      id:job.id,
+      title:job.title,
+      company:job.company,
+      url:job.url,
+      description:clean(job.description || job.jdSnapshot || job.summary || ''),
+      match:Math.round(Number(job.match) || 0),
+      recipient:preview.recipient,
+      recipientSource:preview.recipientSource || 'verified job description',
+      attachments:(preview.attachments || []).map(item => ({ fileName:item.fileName })),
+      subject:preview.subject,
+      body:preview.body,
+      language:'de',
+      delivery:publicFastApplyDelivery(readFastApplyDelivery(job.id)),
+      pending:publicFastApplyPending(pendingFastApplySends.get(job.id))
+    });
+  }
+  return { rows, policy:fastApplyPolicy() };
+}
 function hasActiveFastApplySend() {
   return [...pendingFastApplySends.values()].some(pending => pending.status === 'queued' || pending.status === 'sending');
 }
@@ -1399,6 +1437,11 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
     if (url.pathname === '/api/jobs') { const body = JSON.stringify(await loadDatabase(url.searchParams)); res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'}); return res.end(body); }
+    if (url.pathname === '/api/ready-to-send' && req.method === 'GET') {
+      const limit=Math.min(10,Math.max(1,Number(url.searchParams.get('limit')) || 10));
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ ok:true, ...(await readyToSendApplications(limit)) }));
+    }
     if (url.pathname === '/api/refresh' && req.method === 'POST') {
       const input = await jsonBody(req);
       const body = JSON.stringify(startRefresh(input.query, input.location, input.includeRemoteAnywhere));

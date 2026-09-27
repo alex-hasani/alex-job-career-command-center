@@ -607,6 +607,22 @@
       .prepare-application[disabled] { opacity:.58; cursor:not-allowed; }
       .application-studio { position:fixed; inset:0; z-index:120; display:none; place-items:center; padding:12px; overflow:hidden; background:#071426b8; color:var(--ink); backdrop-filter:blur(5px); }
       .application-studio.open { display:grid; }
+      .ready-shell { width:min(1240px,100%); }
+      .ready-body { overflow:auto; padding:18px 20px 20px; }
+      .ready-actions { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-top:14px; }
+      .ready-actions button { border:1px solid var(--line); border-radius:9px; padding:9px 12px; background:var(--soft); color:var(--ink); font-weight:800; }
+      .ready-actions .success { background:var(--green); color:#fff; border-color:var(--green); }
+      .ready-table-wrap { overflow:auto; border:1px solid var(--line); border-radius:12px; }
+      .ready-table { width:100%; min-width:940px; border-collapse:collapse; font-size:12px; }
+      .ready-table th,.ready-table td { padding:11px; vertical-align:top; border-bottom:1px solid var(--line); text-align:left; }
+      .ready-table th { position:sticky; top:0; z-index:1; background:var(--soft); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+      .ready-table tr:last-child td { border-bottom:0; }
+      .ready-table a { color:var(--blue); font-weight:800; overflow-wrap:anywhere; }
+      .ready-summary { max-width:290px; color:var(--muted); }
+      .ready-status { min-width:130px; font-weight:700; }
+      .ready-row-actions { display:grid; gap:6px; min-width:78px; }
+      .ready-row-actions button { border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); padding:6px 8px; font-weight:800; font-size:11px; }
+      .ready-empty { padding:22px; color:var(--muted); text-align:center; }
       .studio-shell { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); width:min(820px,100%); min-width:0; max-width:100%; max-height:calc(100dvh - 24px); overflow:hidden; border:1px solid var(--line); border-radius:18px; background:var(--card); box-shadow:0 30px 90px #07172f55; }
       .studio-shell * { min-width:0; max-width:100%; }
       .studio-shell :is(h2,p,span,label,b,button,a) { white-space:normal; overflow-wrap:anywhere; word-break:normal; }
@@ -1103,6 +1119,7 @@
           <span class="muted">/ flexible IT job search</span>
         </div>
         <div class="top-actions">
+          <button class="theme-toggle" id="readyToSendButton" type="button">Ready to send</button>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="Change colour theme">◐ Theme</button>
           <button class="link" id="installApp" type="button">Install app</button>
           <span class="muted" id="updated">Not refreshed yet</span>
@@ -1436,6 +1453,18 @@
             title="Selected direct job source"
             referrerpolicy="strict-origin-when-cross-origin"
           ></iframe>
+        </div>
+      </section>
+      <section class="application-studio" id="readyToSendStudio" role="dialog" aria-modal="true" aria-labelledby="readyToSendTitle" hidden>
+        <div class="studio-shell ready-shell">
+          <header class="studio-head">
+            <div><span class="eyebrow">Controlled email queue</span><h2 id="readyToSendTitle">10 ready-to-send applications</h2><p id="readyToSendStatus">Only jobs with a prepared package and an email explicitly verified on the job page appear here.</p></div>
+            <button class="studio-close" id="closeReadyToSend" type="button">Close</button>
+          </header>
+          <div class="ready-body">
+            <div class="ready-table-wrap"><table class="ready-table"><thead><tr><th>Job</th><th>Link</th><th>Short description</th><th>Match</th><th>Attachments</th><th>Recruiter email</th><th>Actions</th></tr></thead><tbody id="readyToSendRows"></tbody></table></div>
+            <div class="ready-actions"><button id="refreshReadyToSend" type="button">Refresh list</button><button class="success" id="sendAllReadyToSend" type="button">Send all verified</button></div>
+          </div>
         </div>
       </section>
       <section class="application-studio" id="applicationStudio" role="dialog" aria-modal="true" aria-labelledby="studioTitle" hidden>
@@ -2331,7 +2360,68 @@
         }
       });
       let currentApplicationJob = null, currentApplicationPackage = null, currentLetterLanguage = "de", currentPackageDocumentType = "cv", studioGenerationInProgress = false, fastApplyMode = false, fastApplyDelivery = null, fastApplyPending = null, fastApplyPoll = null;
+      let readyToSendRows = [];
       const preparedPdfFiles = new Map();
+      function setReadyToSendOpen(open) {
+        const studio=$('readyToSendStudio');
+        studio.hidden=!open; studio.classList.toggle('open',open);
+        document.body.style.overflow=open ? 'hidden' : '';
+      }
+      function shortText(value, length=220) {
+        const text=String(value || '').replace(/\s+/g,' ').trim();
+        return text.length > length ? `${text.slice(0,length - 1)}…` : (text || 'No saved job description.');
+      }
+      function readyRowState(row) {
+        if (row.delivery?.messageId) return 'Sent';
+        if (row.pending?.status === 'queued') return 'Queued · Undo available in job view';
+        if (row.pending?.status === 'sending') return 'Sending…';
+        return 'Ready';
+      }
+      function renderReadyToSend() {
+        const body=$('readyToSendRows');
+        $('readyToSendTitle').textContent=`${readyToSendRows.length} of 10 ready-to-send applications`;
+        if (!readyToSendRows.length) { body.innerHTML='<tr><td class="ready-empty" colspan="7">No additional applications are ready. Prepare a package only after the job description and an explicit application email have been verified.</td></tr>'; return; }
+        body.innerHTML=readyToSendRows.map(row => `<tr><td><b>${escapeHtml(row.title)}</b><br><span class="muted">${escapeHtml(row.company)}</span></td><td>${row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noopener">Open posting ↗</a>` : 'No verified link'}</td><td class="ready-summary">${escapeHtml(shortText(row.description))}</td><td>${escapeHtml(String(row.match))}%</td><td class="ready-status">${row.attachments?.length ? `${row.attachments.length} attached<br><span class="muted">${escapeHtml(row.attachments.map(item=>item.fileName).join(', '))}</span>` : 'Not ready'}</td><td><b>${escapeHtml(row.recipient)}</b><br><span class="muted">${escapeHtml(row.recipientSource)}</span><br><span class="muted">${escapeHtml(readyRowState(row))}</span></td><td><div class="ready-row-actions"><button type="button" data-ready-edit="${escapeHtml(row.id)}">Edit</button><button type="button" data-ready-remove="${escapeHtml(row.id)}">Remove</button></div></td></tr>`).join('');
+        body.querySelectorAll('[data-ready-edit]').forEach(button=>button.onclick=async()=>{ setReadyToSendOpen(false); await startFastApply(button.dataset.readyEdit); });
+        body.querySelectorAll('[data-ready-remove]').forEach(button=>button.onclick=()=>removeReadyToSend(button.dataset.readyRemove));
+      }
+      async function loadReadyToSend() {
+        $('readyToSendStatus').textContent='Checking prepared packages, verified recipient evidence, and today\'s send limit…';
+        try {
+          const response=await fetch('/api/ready-to-send?limit=10',{cache:'no-store'});
+          const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'The ready-to-send list could not load');
+          readyToSendRows=data.rows || [];
+          const policy=data.policy || {};
+          $('readyToSendStatus').textContent=`${readyToSendRows.length} shown. ${policy.remainingToday ?? 0} of ${policy.dailyLimit ?? 10} Gmail sends remain today (Europe/Berlin). Every recipient is explicitly verified on the saved job description.`;
+          renderReadyToSend();
+        } catch(error) { readyToSendRows=[]; renderReadyToSend(); $('readyToSendStatus').textContent=error.message; }
+      }
+      async function removeReadyToSend(id) {
+        const row=readyToSendRows.find(item=>item.id===id); if(!row || !confirm(`Remove ${row.title} from this queue? It will be kept as Stashed, not deleted.`)) return;
+        try {
+          const response=await fetch('/api/application-status',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,applicationStatus:'Stashed'})});
+          const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'Could not remove this application');
+          jobs=jobs.map(job=>job.id===data.job.id ? {...job,...data.job} : job); render(); await loadReadyToSend();
+        } catch(error) { $('readyToSendStatus').textContent=error.message; }
+      }
+      async function sendAllReadyToSend() {
+        const rows=readyToSendRows.filter(row=>!row.delivery?.messageId && !row.pending);
+        if(!rows.length) return;
+        if(!confirm(`Queue ${rows.length} reviewed applications for Gmail? Each recipient is verified from its saved job description. Gmail will hold every email for 15 seconds before delivery; open an individual job to use Undo Send.`)) return;
+        $('sendAllReadyToSend').disabled=true; $('readyToSendStatus').textContent=`Queuing ${rows.length} reviewed emails…`;
+        const failures=[];
+        for(const row of rows) {
+          try {
+            const response=await fetch('/api/fast-apply/send',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id:row.id,to:row.recipient,subject:row.subject,body:row.body,language:row.language,confirmed:true})});
+            const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'Queueing failed');
+            row.pending=data.pending;
+          } catch(error) { failures.push(`${row.company}: ${error.message}`); }
+        }
+        renderReadyToSend();
+        $('sendAllReadyToSend').disabled=false;
+        $('readyToSendStatus').textContent=failures.length ? `Queued ${rows.length - failures.length}; ${failures.length} could not be queued. ${failures.join(' ')}` : `Queued ${rows.length} application${rows.length===1?'':'s'}. They remain undoable for 15 seconds in their individual job view.`;
+        setTimeout(()=>loadReadyToSend(),17000);
+      }
       function setStudioOpen(open) {
         const studio = $("applicationStudio");
         studio.hidden = !open;
@@ -2810,8 +2900,13 @@
         } catch (error) { studioMessage(error.message, true); }
       }
       $("closeStudio").onclick = () => setStudioOpen(false);
+      $('readyToSendButton').onclick=async()=>{ setReadyToSendOpen(true); await loadReadyToSend(); };
+      $('closeReadyToSend').onclick=()=>setReadyToSendOpen(false);
+      $('readyToSendStudio').addEventListener('click',event=>{ if(event.target===$('readyToSendStudio')) setReadyToSendOpen(false); });
+      $('refreshReadyToSend').onclick=loadReadyToSend;
+      $('sendAllReadyToSend').onclick=sendAllReadyToSend;
       $("applicationStudio").addEventListener("click", event => { if (event.target === $("applicationStudio")) setStudioOpen(false); });
-      document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("applicationStudio").hidden) setStudioOpen(false); });
+      document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("applicationStudio").hidden) setStudioOpen(false); if (event.key === "Escape" && !$("readyToSendStudio").hidden) setReadyToSendOpen(false); });
       $("generateCoverLetter").onclick = () => prepareApplication(currentApplicationJob?.id);
       $("generateFromUrl").onclick = () => {
         const postingUrl = $("postingUrlInput").value.trim();
