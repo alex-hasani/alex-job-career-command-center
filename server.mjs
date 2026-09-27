@@ -1437,7 +1437,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/email-reconciliation-request' && req.method === 'GET') {
       let request = null;
       try { request = JSON.parse(await readFile(emailReconciliationRequestPath, 'utf8')); } catch {}
-      const checkpoint = jobDb.getMetadata('last_email_reconciliation');
+      // The dashboard request is completed by the dedicated incremental monitor.
+      // Prefer its checkpoint, while retaining the legacy key for older records.
+      const checkpoint = jobDb.getMetadata('last_gmail_monitor_checkpoint') || jobDb.getMetadata('last_email_reconciliation');
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ request, checkpoint }));
     }
