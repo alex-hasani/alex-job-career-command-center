@@ -119,6 +119,9 @@ async function readyToSendApplications(limit=10) {
     if (!description) continue;
     const attachments=(preview?.attachments || []).map(item => ({ fileName:item.fileName }));
     const sendReady=Boolean(applicationPackage?.quality?.applicationReady && preview?.recipientVerified && preview?.recipient && attachments.length === 2);
+    // The controlled queue only surfaces applications whose address appears in
+    // the saved posting and whose two reviewed PDF attachments are ready.
+    if (!sendReady) continue;
     rows.push({
       id:job.id,
       title:job.title,
@@ -129,7 +132,7 @@ async function readyToSendApplications(limit=10) {
       recipient:preview?.recipient || '',
       recipientSource:preview?.recipientSource || '',
       attachments,
-      attachmentStatus:sendReady ? 'Two PDF attachments ready' : applicationPackage?.quality?.applicationReady ? 'PDF package ready; recruiter email must be verified' : 'PDF package not prepared yet',
+      attachmentStatus:'Two PDF attachments ready',
       sendReady,
       bcc:preview?.bcc || policy.bcc || '',
       subject:preview?.subject || '',
