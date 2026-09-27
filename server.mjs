@@ -38,7 +38,9 @@ const logActivity = event => appendActivityEvent(activityLogPath, event).catch(e
 mkdirSync(join(workspace, 'State'), { recursive:true });
 const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
-const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name });
+const FAST_APPLY_BCC = process.env.FAST_APPLY_BCC || 'candidate-copy@example.org';
+const FAST_APPLY_DAILY_LIMIT = 10;
+const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name, bccEmail:FAST_APPLY_BCC });
 const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
 function readFastApplyDelivery(jobId) {
   try {
@@ -53,12 +55,39 @@ function publicFastApplyDelivery(delivery) {
     messageId: delivery.messageId,
     sentAt: delivery.sentAt,
     to: delivery.to,
+    bcc: delivery.bcc || FAST_APPLY_BCC,
     language: delivery.language,
     attachmentNames: Array.isArray(delivery.attachmentNames) ? delivery.attachmentNames : [],
   } : null;
 }
 const pendingFastApplySends = new Map();
 const FAST_APPLY_UNDO_WINDOW_MS = 15000;
+function berlinDate(date=new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB',{ timeZone:'Europe/Berlin', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(date);
+  const field = type => parts.find(part => part.type === type)?.value || '';
+  return `${field('year')}-${field('month')}-${field('day')}`;
+}
+const fastApplyDailyKey = date => `fast_apply_sent_count:${date}`;
+function fastApplySentToday() {
+  const stored = jobDb.getMetadata(fastApplyDailyKey(berlinDate()))?.value;
+  return Math.max(0, Number.parseInt(stored || '0',10) || 0);
+}
+function pendingFastApplyToday() {
+  const today=berlinDate();
+  return [...pendingFastApplySends.values()].filter(item => ['queued','sending'].includes(item.status) && berlinDate(new Date(item.sendAt)) === today).length;
+}
+function assertFastApplyDailyCapacity(includePending=false) {
+  const count=fastApplySentToday()+(includePending ? pendingFastApplyToday() : 0);
+  if (count >= FAST_APPLY_DAILY_LIMIT) {
+    const error=new Error(`Daily Fast Apply limit reached (${FAST_APPLY_DAILY_LIMIT} emails, Europe/Berlin). Review the next queue tomorrow.`);
+    error.code='FAST_APPLY_DAILY_LIMIT'; throw error;
+  }
+}
+function recordFastApplySend() { jobDb.setMetadata(fastApplyDailyKey(berlinDate()),String(fastApplySentToday()+1)); }
+function fastApplyPolicy() {
+  const sent=fastApplySentToday();
+  return { dailyLimit:FAST_APPLY_DAILY_LIMIT, sentToday:sent, remainingToday:Math.max(0,FAST_APPLY_DAILY_LIMIT-sent-pendingFastApplyToday()), timezone:'Europe/Berlin', bcc:FAST_APPLY_BCC, recipientRule:'The application email must be explicitly listed in the verified job description.' };
+}
 function hasActiveFastApplySend() {
   return [...pendingFastApplySends.values()].some(pending => pending.status === 'queued' || pending.status === 'sending');
 }
@@ -68,7 +97,9 @@ function publicFastApplyPending(pending) {
 async function deliverPendingFastApply(pending) {
   pending.status='sending';
   try {
+    assertFastApplyDailyCapacity();
     const sent=await fastApply.send(pending.job,pending.applicationPackage,pending.input);
+    recordFastApplySend();
     const delivery=publicFastApplyDelivery(sent);
     await updateApplicationStatus(pending.job.id,'Applied');
     jobDb.setMetadata(fastApplySendKey(pending.job.id),JSON.stringify(delivery));
@@ -1488,7 +1519,7 @@ const server = http.createServer(async (req, res) => {
       }
       const preview=await fastApply.preview(job,applicationPackage,input.language||'',input.recipient||'');
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
-      return res.end(JSON.stringify({ok:true,preview,applicationPackage,delivery:publicFastApplyDelivery(readFastApplyDelivery(job.id)),pending:publicFastApplyPending(pendingFastApplySends.get(job.id))}));
+      return res.end(JSON.stringify({ok:true,preview,policy:fastApplyPolicy(),applicationPackage,delivery:publicFastApplyDelivery(readFastApplyDelivery(job.id)),pending:publicFastApplyPending(pendingFastApplySends.get(job.id))}));
     }
     if (url.pathname === '/api/fast-apply/pending' && req.method === 'GET') {
       const job=await applicationJob(url.searchParams.get('id'));
@@ -1510,6 +1541,7 @@ const server = http.createServer(async (req, res) => {
       if (priorDelivery) { const error=new Error('This Fast Apply email has already been sent for this job.'); error.code='FAST_APPLY_ALREADY_SENT'; error.details={delivery:publicFastApplyDelivery(priorDelivery)}; throw error; }
       const existing=pendingFastApplySends.get(job.id);
       if (existing?.status === 'queued' || existing?.status === 'sending') throw new Error('This Fast Apply email is already queued. Use Undo Send before its delivery time if you need to change it.');
+      assertFastApplyDailyCapacity(true);
       const pending={queueId:randomUUID(),status:'queued',queuedAt:new Date().toISOString(),sendAt:new Date(Date.now()+FAST_APPLY_UNDO_WINDOW_MS).toISOString(),input,job,applicationPackage,error:'',delivery:null,timer:null};
       pending.timer=setTimeout(()=>deliverPendingFastApply(pending),FAST_APPLY_UNDO_WINDOW_MS);
       pendingFastApplySends.set(job.id,pending);

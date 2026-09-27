@@ -51,14 +51,16 @@ function copy(job,lang,senderName) {
     ? {subject:`Bewerbung als ${role}`,body:`Guten Tag,\n\nanbei sende ich Ihnen meine Bewerbung als ${role} bei ${company}. Meinen Lebenslauf und mein Anschreiben finden Sie im Anhang.\n\nFür Rückfragen oder ein persönliches Gespräch stehe ich gerne zur Verfügung.\n\nFreundliche Grüße\n${senderName}`}
     : {subject:`Application for ${role}`,body:`Hello,\n\nPlease find attached my application for the ${role} position at ${company}. My CV and cover letter are attached.\n\nI would be pleased to discuss my experience and the role with you.\n\nKind regards,\n${senderName}`};
 }
-function mime({from,to,subject,body,files}) {
+function mime({from,to,bcc='',subject,body,files}) {
   const boundary=`alex-job-${randomBytes(12).toString('hex')}`;
-  const lines=[`From: ${from}`,`To: ${to}`,`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,'MIME-Version: 1.0',`Content-Type: multipart/mixed; boundary="${boundary}"`,'',`--${boundary}`,'Content-Type: text/plain; charset=UTF-8','Content-Transfer-Encoding: base64','',Buffer.from(body).toString('base64')];
+  const headers=[`From: ${from}`,`To: ${to}`];
+  if (bcc) headers.push(`Bcc: ${bcc}`);
+  const lines=[...headers,`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,'MIME-Version: 1.0',`Content-Type: multipart/mixed; boundary="${boundary}"`,'',`--${boundary}`,'Content-Type: text/plain; charset=UTF-8','Content-Transfer-Encoding: base64','',Buffer.from(body).toString('base64')];
   for (const file of files) lines.push(`--${boundary}`,`Content-Type: ${file.contentType}; name="${file.fileName.replace(/["\r\n]/g,'')}"`,'Content-Transfer-Encoding: base64',`Content-Disposition: attachment; filename="${file.fileName.replace(/["\r\n]/g,'')}"`,'',file.bytes.toString('base64'));
   lines.push(`--${boundary}--`,'');
   return b64url(lines.join('\r\n'));
 }
-export function createFastApplyService({root,workspace,coverLetters,senderEmail,senderName}) {
+export function createFastApplyService({root,workspace,coverLetters,senderEmail,senderName,bccEmail=''}) {
   const configPath=join(root,'gmail-oauth.config.json');
   const tokenPath=join(workspace,'State','gmail-oauth-tokens.json');
   const states=new Map();
@@ -101,25 +103,25 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
   }
   async function preview(job,pkg,requested='',recipientOverride=''){
     if(!pkg?.quality?.applicationReady)throw new Error('Prepare and review the application package first');
-    const lang=language(pkg.posting?.text,requested), found=candidates(job,pkg.posting?.text), verifiedRecipients=postingRecipients(pkg.posting?.text);
-    const recipient=recipientOverride?validRecipient(recipientOverride):(found[0]?.email||'');
+    const lang=language(pkg.posting?.text,requested), verifiedRecipients=postingRecipients(pkg.posting?.text);
+    const recipient=recipientOverride?validRecipient(recipientOverride):(verifiedRecipients[0]||'');
     const message=copy(job,lang,clean(senderName)||'Candidate'), cv=pkg.documents.cv[lang], letter=pkg.documents.coverLetter[lang];
-    const recipientMatchesPosting=!recipient || !verifiedRecipients.length || verifiedRecipients.includes(recipient);
-    return{language:lang,recipient,recipientVerified:Boolean(recipient)&&recipientMatchesPosting,recipientSource:recipientOverride?'entered by Alex for this application':(found[0]?.source||''),verifiedRecipients,recipientConflict:Boolean(verifiedRecipients.length&&job?.recruiterContact&&!verifiedRecipients.includes(String(job.recruiterContact).toLowerCase())),subject:message.subject,body:message.body,attachments:[{type:'cv',fileName:cv.document.fileName.replace(/\.docx$/i,'.pdf')},{type:'coverLetter',fileName:letter.document.fileName.replace(/\.docx$/i,'.pdf')}],gmail:await status()};
+    const recipientMatchesPosting=Boolean(recipient)&&verifiedRecipients.includes(recipient);
+    return{language:lang,recipient,recipientVerified:recipientMatchesPosting,recipientSource:recipientOverride?'entered by Alex for this application':'verified job description',verifiedRecipients,bcc:bccEmail,recipientConflict:Boolean(verifiedRecipients.length&&job?.recruiterContact&&!verifiedRecipients.includes(String(job.recruiterContact).toLowerCase())),subject:message.subject,body:message.body,attachments:[{type:'cv',fileName:cv.document.fileName.replace(/\.docx$/i,'.pdf')},{type:'coverLetter',fileName:letter.document.fileName.replace(/\.docx$/i,'.pdf')}],gmail:await status()};
   }
   async function send(job,pkg,input){
     const to=validRecipient(input.to), subject=String(input.subject||'').replace(/[\r\n]+/g,' ').trim(), body=String(input.body||'').replace(/\r\n?/g,'\n').trim();
     const verifiedRecipients=postingRecipients(pkg.posting?.text);
-    if(verifiedRecipients.length&&!verifiedRecipients.includes(to)){const error=new Error('Recipient mismatch: this job description explicitly lists ' + verifiedRecipients.join(', ') + '. Use that address or refresh/paste the exact job description.');error.code='RECIPIENT_MISMATCH';throw error;}
+    if(!verifiedRecipients.length||!verifiedRecipients.includes(to)){const error=new Error('Recipient mismatch: use an email explicitly listed in the verified job description. Listed addresses: ' + (verifiedRecipients.join(', ') || 'none') + '.');error.code='RECIPIENT_MISMATCH';throw error;}
     if(!subject||subject.length>300)throw new Error('Review the email subject before sending');
     if(body.length<40||body.length>5000)throw new Error('Review the email message before sending');
     if(input.confirmed!==true)throw new Error('Final send confirmation is required');
     const lang=language(pkg.posting?.text,input.language), files=[];
     for(const type of ['cv','coverLetter']){const item=await coverLetters.download(job,lang,'pdf',type,pkg.currentVersion);files.push({fileName:item.fileName,contentType:item.contentType,bytes:await readFile(item.path)});}
     const token=await accessToken(), t=await tokens();
-    const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({raw:mime({from:t.email,to,subject,body,files})}),signal:AbortSignal.timeout(30000)});
+    const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({raw:mime({from:t.email,to,bcc:bccEmail,subject,body,files})}),signal:AbortSignal.timeout(30000)});
     if(!response.ok)throw await gmailFailure(response,'Gmail did not send the application email');
-    const result=await response.json();return{messageId:result.id,threadId:result.threadId||'',sentAt:new Date().toISOString(),to,subject,language:lang,attachmentNames:files.map(f=>f.fileName)};
+    const result=await response.json();return{messageId:result.id,threadId:result.threadId||'',sentAt:new Date().toISOString(),to,bcc:bccEmail,subject,language:lang,attachmentNames:files.map(f=>f.fileName)};
   }
   return{status,authorizationUrl,callback,preview,send};
 }

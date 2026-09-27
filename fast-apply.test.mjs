@@ -33,6 +33,7 @@ test('MIME payload contains both reviewed PDF attachments', () => {
   const raw = fastApplyInternals.mime({
     from:'candidate@example.org',
     to:'jobs@example.org',
+    bcc:'candidate-copy@example.org',
     subject:'Application',
     body:'Reviewed message',
     files:[
@@ -43,6 +44,7 @@ test('MIME payload contains both reviewed PDF attachments', () => {
   const decoded = Buffer.from(raw.replace(/-/g,'+').replace(/_/g,'/'),'base64').toString('utf8');
   assert.match(decoded, /filename="CV\.pdf"/);
   assert.match(decoded, /filename="Cover-Letter\.pdf"/);
+  assert.match(decoded, /Bcc: candidate-copy@example\.org/);
 });
 
 test('Google result extraction keeps external posting URLs and removes Google links', () => {
@@ -52,7 +54,7 @@ test('Google result extraction keeps external posting URLs and removes Google li
 
 test('preview is editable, lists both PDFs and never requires Gmail to be connected', async () => {
   const service = createFastApplyService({ root:'X:/missing-fast-apply-config', workspace:'X:/missing-fast-apply-state', coverLetters:{}, senderEmail:'candidate@example.org', senderName:'Verified Candidate' });
-  const pkg = { quality:{ applicationReady:true }, posting:{ text:'Aufgaben Anforderungen und Erfahrung Betrieb Systeme' }, documents:{ cv:{ de:{ document:{ fileName:'CV_DE.docx' } } }, coverLetter:{ de:{ document:{ fileName:'Letter_DE.docx' } } } } };
+  const pkg = { quality:{ applicationReady:true }, posting:{ text:'Aufgaben Anforderungen und Erfahrung Betrieb Systeme. Bewerbung an jobs@example.org' }, documents:{ cv:{ de:{ document:{ fileName:'CV_DE.docx' } } }, coverLetter:{ de:{ document:{ fileName:'Letter_DE.docx' } } } } };
   const preview = await service.preview({ title:'System Engineer', company:'Example GmbH', recruiterContact:'jobs@example.org' },pkg,'de');
   assert.equal(preview.gmail.connected,false);
   assert.equal(preview.recipient,'jobs@example.org');
@@ -72,6 +74,8 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /fast_apply_sent:/);
   assert.match(source, /FAST_APPLY_ALREADY_SENT/);
   assert.match(source, /FAST_APPLY_UNDO_WINDOW_MS/);
+  assert.match(source, /FAST_APPLY_DAILY_LIMIT = 10/);
+  assert.match(source, /FAST_APPLY_BCC/);
   assert.match(source, /api\/fast-apply\/undo/);
   assert.match(source, /hasActiveFastApplySend/);
   assert.match(source, /deferring restart until the active Fast Apply delivery finishes/);

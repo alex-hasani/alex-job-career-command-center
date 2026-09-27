@@ -1476,7 +1476,7 @@
             </section>
             <section class="fast-apply" id="fastApplyPanel" hidden>
               <h3>Fast Apply · Gmail preview</h3>
-              <p class="muted" id="fastApplyStatus">Nothing will be sent until you review this preview and press Send with Gmail.</p>
+              <p class="muted" id="fastApplyStatus">Nothing will be sent until you review this preview and press Send with Gmail.</p><p class="muted" id="fastApplyPolicy">BCC and daily approval policy will load with the preview.</p>
               <div class="studio-field"><label for="fastApplyRecipient">Recruiter / application email</label><input id="fastApplyRecipient" type="email" autocomplete="email" placeholder="Verified recipient required"><p class="muted" id="fastApplyRecipientProof" aria-live="polite"></p></div>
               <div class="studio-field"><label for="fastApplySubject">Subject</label><input id="fastApplySubject" maxlength="300"></div>
               <div class="studio-field"><label for="fastApplyBody">Email message</label><textarea id="fastApplyBody" maxlength="5000" rows="9"></textarea></div>
@@ -2753,7 +2753,7 @@
         $("fastApplyPanel").hidden = false; $("fastApplyStatus").textContent = "Preparing the editable email preview…";
         const response = await fetch("/api/fast-apply/preview",{method:"POST",headers:writeHeaders(),body:JSON.stringify({id:currentApplicationJob.id,language:currentLetterLanguage,recipient})});
         const data = await readWriteResponse(response); if (!response.ok) throw new Error(data.error || "Fast Apply preview could not be prepared");
-        currentApplicationPackage = data.applicationPackage; const preview = data.preview;
+        currentApplicationPackage = data.applicationPackage; const preview = data.preview; const policy = data.policy || {}; $("fastApplyPolicy").textContent = policy.dailyLimit ? `BCC: ${preview.bcc || policy.bcc || "not configured"} · ${policy.remainingToday} of ${policy.dailyLimit} approved sends remaining today (Europe/Berlin).` : "Recipient must be explicitly listed in the verified job description.";
         if (!preserveDraft) { $("fastApplyRecipient").value = preview.recipient || ""; $("fastApplySubject").value = preview.subject; $("fastApplyBody").value = preview.body; }
         const verified=preview.verifiedRecipients || [];
         $("fastApplyRecipient").readOnly=Boolean(verified.length); $("fastApplyRecipient").dataset.source=preview.recipientSource || "";
