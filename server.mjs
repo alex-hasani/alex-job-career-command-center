@@ -42,6 +42,7 @@ const FAST_APPLY_BCC = process.env.FAST_APPLY_BCC || 'candidate-copy@example.org
 const FAST_APPLY_DAILY_LIMIT = 10;
 const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name, bccEmail:FAST_APPLY_BCC });
 const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
+const fastApplyErrorKey = jobId => `fast_apply_error:${jobId}`;
 function readFastApplyDelivery(jobId) {
   try {
     const saved = jobDb.getMetadata(fastApplySendKey(jobId)) || jobDb.getMetadata('last_fast_apply_send');
@@ -59,6 +60,13 @@ function publicFastApplyDelivery(delivery) {
     language: delivery.language,
     attachmentNames: Array.isArray(delivery.attachmentNames) ? delivery.attachmentNames : [],
   } : null;
+}
+function readFastApplyFailure(jobId) {
+  try {
+    const saved=jobDb.getMetadata(fastApplyErrorKey(jobId));
+    const failure=JSON.parse(saved?.value || 'null');
+    return failure?.message ? { message:failure.message, failedAt:failure.failedAt || saved?.updatedAt || '' } : null;
+  } catch { return null; }
 }
 const pendingFastApplySends = new Map();
 const FAST_APPLY_UNDO_WINDOW_MS = 15000;
@@ -133,6 +141,7 @@ async function readyToSendApplications(limit=10) {
       attachments,
       attachmentStatus:'Two PDF attachments ready',
       sendReady,
+      gmail:preview?.gmail || { configured:false, connected:false },
       bcc:preview?.bcc || policy.bcc || '',
       subject:preview?.subject || '',
       body:preview?.body || '',
@@ -160,13 +169,17 @@ async function deliverPendingFastApply(pending) {
     jobDb.setMetadata(fastApplySendKey(pending.job.id),JSON.stringify(delivery));
     jobDb.setMetadata('last_fast_apply_send',JSON.stringify({...delivery,jobId:pending.job.id}));
     pending.status='sent'; pending.delivery=delivery;
+    jobDb.setMetadata(fastApplyErrorKey(pending.job.id), '');
     logActivity({ action:'fast_apply.send', result:'sent', jobId:pending.job.id, detail:'Gmail accepted message ' + sent.messageId });
     // Delivery is durably recorded above. Removing this finished in-memory item
     // lets the client read the definitive delivery state after a reload.
     if (pendingFastApplySends.get(pending.job.id) === pending) pendingFastApplySends.delete(pending.job.id);
   } catch (error) {
     pending.status='failed'; pending.error=error.message;
+    jobDb.setMetadata(fastApplyErrorKey(pending.job.id), JSON.stringify({ message:error.message, failedAt:new Date().toISOString() }));
     logActivity({ action:'fast_apply.send', result:'failed', jobId:pending.job.id, detail:error.message });
+    // A failed delivery must not block a corrected retry after reconnecting Gmail.
+    if (pendingFastApplySends.get(pending.job.id) === pending) pendingFastApplySends.delete(pending.job.id);
   }
 }
 let importedTracker = { path:'', modified:0 };
@@ -1611,7 +1624,9 @@ const server = http.createServer(async (req, res) => {
       if (priorDelivery) { const error=new Error('This Fast Apply email has already been sent for this job.'); error.code='FAST_APPLY_ALREADY_SENT'; error.details={delivery:publicFastApplyDelivery(priorDelivery)}; throw error; }
       const existing=pendingFastApplySends.get(job.id);
       if (existing?.status === 'queued' || existing?.status === 'sending') throw new Error('This Fast Apply email is already queued. Use Undo Send before its delivery time if you need to change it.');
+      await fastApply.verifyConnection();
       assertFastApplyDailyCapacity(true);
+      jobDb.setMetadata(fastApplyErrorKey(job.id), '');
       const pending={queueId:randomUUID(),status:'queued',queuedAt:new Date().toISOString(),sendAt:new Date(Date.now()+FAST_APPLY_UNDO_WINDOW_MS).toISOString(),input,job,applicationPackage,error:'',delivery:null,timer:null};
       pending.timer=setTimeout(()=>deliverPendingFastApply(pending),FAST_APPLY_UNDO_WINDOW_MS);
       pendingFastApplySends.set(job.id,pending);

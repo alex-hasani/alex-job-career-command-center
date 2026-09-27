@@ -78,7 +78,16 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     return c;
   }
   const tokens=async()=>existsSync(tokenPath)?JSON.parse(await readFile(tokenPath,'utf8')):null;
-  async function status(){let configured=true;try{await config();}catch{configured=false;}const t=await tokens();return{configured,connected:Boolean(t?.refreshToken||(t?.accessToken&&t.expiresAt>Date.now())),email:t?.email||''};}
+  // A stored refresh token is not proof that Gmail will still accept a send.
+  // Refresh it during preview so the queue never accepts an email that is
+  // guaranteed to fail after the Undo window ends.
+  async function status(){
+    let configured=true; try { await config(); } catch { configured=false; }
+    const t=await tokens();
+    if (!configured || !t) return {configured,connected:false,email:t?.email||''};
+    try { await accessToken(); const current=await tokens(); return {configured,connected:true,email:current?.email||''}; }
+    catch (error) { return {configured,connected:false,email:t.email||'',error:error.message}; }
+  }
   async function authorizationUrl(){
     const c=await config(), state=randomBytes(24).toString('hex'); states.set(state,Date.now()+600000);
     const q=new URLSearchParams({client_id:c.clientId,redirect_uri:c.redirectUri,response_type:'code',scope:'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',access_type:'offline',prompt:'consent',state});
@@ -130,6 +139,6 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     if(!response.ok)throw await gmailFailure(response,'Gmail did not send the application email');
     const result=await response.json();return{messageId:result.id,threadId:result.threadId||'',sentAt:new Date().toISOString(),to,bcc:bccEmail,subject,language:lang,attachmentNames:files.map(f=>f.fileName)};
   }
-  return{status,authorizationUrl,callback,preview,send};
+  return{status,authorizationUrl,callback,preview,send,verifyConnection:async()=>{ await accessToken(); const t=await tokens(); return {email:t?.email||''}; }};
 }
 export const fastApplyInternals={candidates,postingRecipients,language,copy,validRecipient,mime,pdfAttachment,gmailFailureMessage};
