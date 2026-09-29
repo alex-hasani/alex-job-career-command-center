@@ -17,20 +17,45 @@ export function fieldKindForHint(value='') {
   if(/full.?name|vorname.?nachname|ihr.?name|^name$/.test(hint.trim())) return 'name';
   if(/e.?mail/.test(hint)) return 'email';
   if(/phone|telefon|mobile|mobil/.test(hint)) return 'phone';
-  if(/location|standort|wohnort|city|stadt|address|adresse/.test(hint)) return 'location';
+  if(/house.?number|hausnummer|haus.?nr/.test(hint)) return 'houseNumber';
+  if(/postal|post.?code|zip|\bplz\b/.test(hint)) return 'postalCode';
+  if(/street|straße|strasse/.test(hint)) return 'street';
+  if(/country|land/.test(hint)) return 'country';
+  if(/city|stadt|\bort\b/.test(hint)) return 'city';
+  if(/full.?address|anschrift|adresse|address/.test(hint)) return 'address';
+  if(/location|standort|wohnort/.test(hint)) return 'location';
   if(/linkedin/.test(hint)) return 'linkedin';
   if(/github/.test(hint)) return 'github';
   if(/work.?auth|arbeitserlaubnis|work.?permit/.test(hint)) return 'authorisation';
   if(/salary|gehalt|compensation/.test(hint)) return 'salary';
+  if(/start.?date|available.?from|availability|eintritt|beginn|verfügbar|kuendigung|kündigung/.test(hint)) return 'startDate';
+  if(/anmerkung|comment|additional.?information|nachricht|message|motivation|anschreiben/.test(hint)) return 'notes';
   return '';
 }
 function fileKindForHint(value='') {
   const hint=normal(value);
   if(/cover|letter|anschreiben|motivationsschreiben/.test(hint)) return 'letter';
   if(/resume|curriculum|lebenslauf|\bcv\b/.test(hint)) return 'cv';
-  return 'both';
+  return 'cv';
 }
-export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint }; }
+function nextUploadKind(value='', uploadedFileKinds=new Set()) {
+  const kind=fileKindForHint(value)==='letter'?'letter':'cv';
+  return uploadedFileKinds.has(kind)?'':kind;
+}
+function applicationNote(job,lang,name,startAvailability) {
+  const text=normal(`${job.title||''} ${job.description||''}`);
+  const focus=/(?:microsoft 365|m365|intune|entra|active directory|modern workplace)/.test(text)
+    ? {de:'Meine praktische Erfahrung mit Microsoft 365, Intune, Entra ID und Active Directory passt besonders gut zu den beschriebenen Aufgaben.',en:'My practical experience with Microsoft 365, Intune, Entra ID and Active Directory aligns particularly well with the described responsibilities.'}
+    : /(?:azure|hybrid cloud|cloud infrastructure)/.test(text)
+      ? {de:'Meine Erfahrung mit Azure, hybrider Infrastruktur sowie Windows- und Linux-Betrieb passt besonders gut zu dieser Position.',en:'My experience with Azure, hybrid infrastructure, and Windows and Linux operations aligns particularly well with this position.'}
+      : /(?:linux|vmware|virtuali|server|infrastruktur|infrastructure)/.test(text)
+        ? {de:'Meine langjährige Erfahrung im Windows-, Linux-, VMware- und Infrastruktur-Betrieb passt besonders gut zu dieser Position.',en:'My extensive experience in Windows, Linux, VMware, and infrastructure operations aligns particularly well with this position.'}
+        : {de:'Meine nachgewiesene Erfahrung im IT-Infrastruktur- und Systembetrieb passt gut zu den beschriebenen Aufgaben.',en:'My verified experience in IT infrastructure and systems operations aligns well with the described responsibilities.'};
+  return lang==='de'
+    ? `Guten Tag, ich bewerbe mich mit großem Interesse auf die Position ${job.title} bei ${job.company}. ${focus.de} ${startAvailability} Freundliche Grüße, ${name}`
+    : `Hello, I am very interested in the ${job.title} position at ${job.company}. ${focus.en} ${startAvailability} Kind regards, ${name}`;
+}
+export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint, nextUploadKind, applicationNote }; }
 
 export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEvent=()=>{} }) {
   const sessions=new Map(); let context=null;
@@ -40,7 +65,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     if(!chromePath) throw new Error('Google Chrome is not installed in a supported location on HOME-PC');
     await mkdir(profileDir,{recursive:true});
     const { chromium }=await import('playwright');
-    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:chromePath,viewport:null,locale:'de-DE',args:['--start-maximized','--new-window']});
+    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:chromePath,viewport:null,locale:'de-DE',ignoreDefaultArgs:['--no-sandbox'],args:['--start-maximized','--new-window']});
     context.on('close',()=>{ context=null; }); return context;
   }
   const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Google Chrome on HOME-PC'} : null;
@@ -51,15 +76,39 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   async function controlHint(control) {
     return control.evaluate(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; const wrapping=el.closest('label')?.innerText||el.parentElement?.innerText||''; return [label,wrapping,el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.autocomplete].filter(Boolean).join(' ').slice(0,1000); });
   }
-  async function fill(page,values,files) {
+  async function fill(page,values,files,uploadedFileKinds) {
     const assigned=[];
-    const controls=await page.locator('input:not([type="hidden"]):not([type="password"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),textarea').all();
-    for(const control of controls) { try { if(await control.isDisabled()||(await control.inputValue()).trim()) continue; const kind=fieldKindForHint(await controlHint(control)); if(!kind||!values[kind]) continue; await control.fill(values[kind]); assigned.push(kind); } catch {} }
-    for(const upload of await page.locator('input[type="file"]').all()) { try { const kind=fileKindForHint(await controlHint(upload)); await upload.setInputFiles(kind==='cv'?[files.cv]:kind==='letter'?[files.letter]:[files.cv,files.letter]); assigned.push(kind==='both'?'two PDF files':`${kind} PDF`); } catch {} }
+    const controls=await page.locator('input:not([type="hidden"]):not([type="password"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),textarea,select').all();
+    for(const control of controls) {
+      try {
+        if(await control.isDisabled()||(await control.inputValue()).trim()) continue;
+        const hint=await controlHint(control), kind=fieldKindForHint(hint); if(!kind||!values[kind]) continue;
+        const tag=await control.evaluate(el=>el.tagName.toLowerCase()), type=(await control.getAttribute('type')||'').toLowerCase();
+        let value=values[kind];
+        if(kind==='phone' && /ohne\s*(?:0|landes)|without\s*(?:0|country)/i.test(hint)) value=values.phoneSubscriber;
+        else if(kind==='phone' && /(?:^|\D)0\s*1\d{2}/.test(hint)) value=values.phoneNational;
+        if(kind==='startDate' && type==='date') value=values.startDateIso;
+        if(tag==='select') {
+          const options=await control.locator('option').evaluateAll(nodes=>nodes.map(node=>({label:(node.textContent||'').trim(),value:node.value})));
+          const wanted=[value,values.countryAlt].filter(Boolean).map(normal);
+          const option=options.find(item=>wanted.some(candidate=>normal(item.label)===candidate||normal(item.label).includes(candidate)));
+          if(!option) continue; await control.selectOption(option.value);
+        } else await control.fill(value);
+        assigned.push(kind);
+      } catch {}
+    }
+    for(const upload of await page.locator('input[type="file"]').all()) {
+      try {
+        const kind=nextUploadKind(await controlHint(upload),uploadedFileKinds);
+        if(!kind) continue;
+        await upload.setInputFiles(kind==='letter'?[files.letter]:[files.cv]);
+        uploadedFileKinds.add(kind); assigned.push(`${kind} PDF`);
+      } catch {}
+    }
     return [...new Set(assigned)];
   }
   async function requiredUnknowns(page) {
-    return page.locator('input:required,textarea:required,select:required').evaluateAll(nodes=>nodes.filter(el=>!el.disabled&&(el.type==='checkbox'||el.type==='radio'?!el.checked:!String(el.value||'').trim())).map(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; return (label||el.getAttribute('aria-label')||el.placeholder||el.name||el.id||'required field').replace(/\s+/g,' ').trim(); }).slice(0,6));
+    return page.locator('input:required:not([type="file"]),textarea:required,select:required').evaluateAll(nodes=>nodes.filter(el=>!el.disabled&&((el.type==='checkbox'||el.type==='radio'?!el.checked:!String(el.value||'').trim())||!el.checkValidity())).map(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; return (label||el.getAttribute('aria-label')||el.placeholder||el.name||el.id||'required field').replace(/\s+/g,' ').trim(); }).slice(0,6));
   }
   async function navigateToApplication(session) {
     const page=session.page;
@@ -80,7 +129,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
       const state=await snapshot(session.page);
       if(state.captcha) return set(session,'waiting_for_login','Complete the CAPTCHA in Google Chrome; the agent will continue automatically.');
       if(state.password||(LOGIN.test(state.text)&&!/application|bewerbung/i.test(state.text))) return set(session,'waiting_for_login','Complete sign-in in Google Chrome; the agent will continue automatically.');
-      const fields=await fill(session.page,session.values,session.files), unknowns=await requiredUnknowns(session.page), refreshed=await snapshot(session.page);
+      const fields=await fill(session.page,session.values,session.files,session.uploadedFileKinds), unknowns=await requiredUnknowns(session.page), refreshed=await snapshot(session.page);
       if(refreshed.final) return set(session,'ready_for_final_confirmation',unknowns.length?`Review required fields in Chrome before final submission: ${unknowns.join(', ')}.`:'Form and two PDFs are ready. Review Google Chrome and confirm final submission in Alex Job.');
       if(unknowns.length) return set(session,'needs_review',`Complete these unknown required fields in Google Chrome: ${unknowns.join(', ')}. The agent will continue afterward.`);
       const moved=await advance(session.page); session.steps+=1; set(session,moved?'advancing':'needs_review',moved?`Completed form step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised item(s). Review Google Chrome for a site-specific question or control.`);
@@ -88,14 +137,18 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   }
   async function attach(jobId,job,applicationPackage,language='de') {
     const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open');
-    const lang=['de','en'].includes(language)?language:'de', cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion), parts=String(profile.identity.name||'').replace(/\([^)]*\)/g,' ').trim().split(/\s+/);
-    session.files={cv:cv.path,letter:letter.path}; session.values={name:profile.identity.name,firstName:parts[0],lastName:parts.at(-1),email:profile.identity.email,phone:profile.identity.phone,location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang],salary:lang==='de'?'80.000 EUR brutto pro Jahr, verhandelbar':'EUR 80,000 gross per year, negotiable'};
+    const lang=['de','en'].includes(language)?language:'de', cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion);
+    const form=profile.applicationForm||{}, applicantName=`${form.firstName||'Candidate'} ${form.lastName||''}`.trim(), startDate=new Date(); startDate.setMonth(startDate.getMonth()+3);
+    const notes=applicationNote(job,lang,applicantName,form.startAvailability?.[lang]||'');
+    session.files={cv:cv.path,letter:letter.path};
+    session.values={name:applicantName,firstName:form.firstName||'',lastName:form.lastName||'',email:profile.identity.email,phone:form.phoneInternational||profile.identity.phone,phoneNational:form.phoneNational||'',phoneSubscriber:form.phoneSubscriber||'',address:form.address||profile.identity.location,street:form.street||'',houseNumber:form.houseNumber||'',postalCode:form.postalCode||'',city:form.city||'',country:form.country?.[lang]||'',countryAlt:form.country?.[lang==='de'?'en':'de']||'',location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang],salary:lang==='de'?'80.000 EUR brutto pro Jahr, verhandelbar':'EUR 80,000 gross per year, negotiable',startDate:form.startAvailability?.[lang]||'',startDateIso:startDate.toISOString().slice(0,10),notes};
     set(session,'preparing_form','Two reviewed PDF files are ready. Filling the website form in Google Chrome now…'); session.timer=setInterval(()=>drive(session),2000); session.timer.unref?.(); await drive(session); return publicSession(session);
   }
   async function start(job,applicationPackage=null,language='de') {
     if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
-    const activeContext=await browserContext(); let page=activeContext.pages().find(candidate=>candidate.url()==='about:blank'); if(!page) page=await activeContext.newPage();
-    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:null,values:{},timer:null};
+    const activeContext=await browserContext(), blankPages=activeContext.pages().filter(candidate=>candidate.url()==='about:blank'); let page=blankPages[0]; if(!page) page=await activeContext.newPage();
+    for(const extra of blankPages.slice(1)) await extra.close().catch(()=>{});
+    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:null,values:{},uploadedFileKinds:new Set(),timer:null};
     sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The Google Chrome application window was closed before submission.'); });
     await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened in Google Chrome. Reading its complete rendered description and application controls…'); return publicSession(session);
   }

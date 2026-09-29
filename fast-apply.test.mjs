@@ -31,6 +31,16 @@ test('German challenge and qualification sections count as a complete advert', (
 test('website agent recognises common ATS fields and keeps continuation separate from submission', () => {
   assert.equal(fieldKindForHint('Vorname / First name'),'firstName');
   assert.equal(fieldKindForHint('Gehaltsvorstellung'),'salary');
+  assert.equal(fieldKindForHint('Straße'),'street');
+  assert.equal(fieldKindForHint('PLZ'),'postalCode');
+  assert.equal(fieldKindForHint('Deine Anmerkungen'),'notes');
+  assert.equal(websiteApplyInternals().fileKindForHint('Lebenslauf hochladen'),'cv');
+  assert.equal(websiteApplyInternals().fileKindForHint('Weitere Dokumente'),'cv');
+  assert.equal(websiteApplyInternals().fileKindForHint('Anschreiben'),'letter');
+  const uploaded=new Set(['cv']);
+  assert.equal(websiteApplyInternals().nextUploadKind('Weitere Dokumente',uploaded),'');
+  assert.equal(websiteApplyInternals().nextUploadKind('Anschreiben',uploaded),'letter');
+  assert.match(websiteApplyInternals().applicationNote({title:'Modern Workplace Administrator',company:'Example GmbH',description:'Microsoft 365 Intune Entra ID'},'de','Sample Candidate','In drei Monaten.'),/Microsoft 365, Intune, Entra ID/);
   assert.match('Continue',websiteApplyInternals().ADVANCE);
   assert.doesNotMatch('Continue',websiteApplyInternals().FINAL);
 });

@@ -17,6 +17,23 @@ export const canonicalResumeProfile = {
       en: 'Work authorisation: verify in the local profile'
     }
   },
+  applicationForm: {
+    firstName: 'Jordan',
+    lastName: 'Example',
+    phoneInternational: '+49 000 0000000',
+    phoneNational: '00000000000',
+    phoneSubscriber: '0000000000',
+    address: 'Example Street 1, 70000 Stuttgart, Germany',
+    street: 'Example Street',
+    houseNumber: '1',
+    postalCode: '70000',
+    city: 'Stuttgart',
+    country: { de:'Deutschland', en:'Germany' },
+    startAvailability: {
+      de:'Starttermin im lokalen Profil verifizieren.',
+      en:'Verify the start date in the local profile.'
+    }
+  },
   baseHeadline: {
     de: 'Infrastructure Engineer | Hybrid Cloud & Automation',
     en: 'Infrastructure Engineer | Hybrid Cloud & Automation'
