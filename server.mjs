@@ -1641,11 +1641,15 @@ const server = http.createServer(async (req, res) => {
       const input=await jsonBody(req), job=await applicationJob(input.id);
       if (TERMINAL_APPLICATION_STATUSES.has(job.applicationStatus)) throw new Error('This application is already closed or recorded as submitted');
       let applicationPackage=await coverLetters.readPackage(job);
+      let preparedJob=job;
+      let session=await websiteApply.start(job,null,input.language||'de');
       if (!applicationPackage?.quality?.applicationReady) {
-        applicationPackage=await coverLetters.prepare(job,'',{scope:'full'});
-        jobDb.upsertApplicationPackage(job.id,applicationPackage);
+        const posting=await websiteApply.posting(job.id);
+        preparedJob=await storeRetrievedJobDescription(job,posting,'website-apply-browser-jd');
+        applicationPackage=await coverLetters.prepare(preparedJob,'',{scope:'full',posting});
+        jobDb.upsertApplicationPackage(preparedJob.id,applicationPackage);
       }
-      const session=await websiteApply.start(job,applicationPackage,input.language||'de');
+      session=await websiteApply.attach(job.id,preparedJob,applicationPackage,input.language||'de');
       res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ok:true,session}));
     }

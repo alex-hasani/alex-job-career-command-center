@@ -18,11 +18,11 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     if (context) return context;
     await mkdir(profileDir,{recursive:true});
     const { chromium }=await import('playwright');
-    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:edgePath,viewport:null,args:['--start-maximized']});
+    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:edgePath,viewport:null,args:['--start-maximized','--new-window']});
     context.on('close',()=>{ context=null; }); return context;
   }
-  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps} : null;
-  function set(session,status,message) { session.status=status; session.message=message; session.updatedAt=new Date().toISOString(); onEvent({action:`website_apply.${status}`,result:'ok',jobId:session.jobId,detail:message}); }
+  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Microsoft Edge on HOME-PC'} : null;
+  function set(session,status,message) { const changed=session.status!==status||session.message!==message; session.status=status; session.message=message; session.updatedAt=new Date().toISOString(); if(changed) onEvent({action:`website_apply.${status}`,result:'ok',jobId:session.jobId,detail:message}); }
   async function snapshot(page) { return page.evaluate(() => ({text:document.body?.innerText?.slice(0,24000)||'',password:Boolean(document.querySelector('input[type="password"]')),final:[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].some(el=>/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((el.innerText||el.value||'').trim()))})); }
   async function fill(page,values,files) {
     const assigned=await page.evaluate(({labels,values})=>{
@@ -40,6 +40,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   async function advance(page) { return page.evaluate(() => { const safeStep=/next|continue|weiter|fortfahren|proceed/i, startApplication=/apply now|jetzt bewerben|bewerben/i, final=/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i; const el=[...document.querySelectorAll('button,a[role="button"],a[href]')].find(node=>{const text=(node.innerText||node.value||'').trim(); const ordinaryStep=safeStep.test(text)&&node.tagName!=='A'&&node.type!=='submit'; const safeStart=node.tagName==='A'&&Boolean(node.getAttribute('href'))&&startApplication.test(text); return (ordinaryStep||safeStart)&&!final.test(text)&&!node.disabled;});if(!el)return false;el.click();return true; }); }
   async function drive(session) {
     if(!session||session.running||['submitted','ready_for_final_confirmation'].includes(session.status)) return;
+    if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The AI browser window was closed before submission.'); }
     session.running=true; try {
       const pageState=await snapshot(session.page);
       if(pageState.password || (LOGIN.test(pageState.text)&&!/application|bewerbung/i.test(pageState.text))) return set(session,'waiting_for_login','Complete sign-in or CAPTCHA in the opened browser; the agent will continue automatically.');
@@ -47,21 +48,29 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
       if(pageState.final) return set(session,'ready_for_final_confirmation','Form preparation is complete. Review the browser and confirm final submission in Alex Job.');
       const moved=await advance(session.page); session.steps+=1;
       set(session,moved?'advancing':'review_needed',moved?`Completed step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised field(s). Complete unknown required fields in the browser.`);
-    } catch(error) { set(session,'needs_review',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
+    } catch(error) { clearInterval(session.timer); set(session,'needs_review',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
   }
-  async function start(job,applicationPackage,language='de') {
-    if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
+  async function attach(jobId,job,applicationPackage,language='de') {
+    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The AI browser window is no longer open');
     const lang=['de','en'].includes(language)?language:'de';
     const cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion);
-    const page=await (await browserContext()).newPage();
-    const session={id:randomUUID(),jobId:job.id,page,status:'starting',message:'Opening the exact job application page…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:[cv.path,letter.path],values:{name:profile.identity.name,email:profile.identity.email,phone:profile.identity.phone,location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang]}};
-    sessions.set(job.id,session); page.on('close',()=>clearInterval(session.timer)); await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); session.timer=setInterval(()=>drive(session),2500); session.timer.unref?.(); await drive(session); return publicSession(session);
+    session.files=[cv.path,letter.path]; session.values={name:profile.identity.name,email:profile.identity.email,phone:profile.identity.phone,location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang]};
+    set(session,'preparing_form','Two reviewed PDFs are ready. Starting form completion in the AI browser.');
+    session.timer=setInterval(()=>drive(session),2500); session.timer.unref?.(); await drive(session); return publicSession(session);
   }
+  async function start(job,applicationPackage=null,language='de') {
+    if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
+    const activeContext=await browserContext(), page=activeContext.pages().find(candidate=>candidate.url()==='about:blank')||await activeContext.newPage();
+    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening and scanning the exact job advert in Microsoft Edge on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:[],values:{},timer:null};
+    sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The AI browser window was closed before submission.'); }); await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront();
+    if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened. Scanning the rendered job description before preparing PDFs.'); return publicSession(session);
+  }
+  async function posting(jobId) { const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The AI browser window is no longer open'); const result=await session.page.evaluate(()=>({text:(document.body?.innerText||'').replace(/\s+/g,' ').trim(),url:location.href,title:document.title})); return {...result,source:'exact posting rendered in AI browser',retrievedAt:new Date().toISOString(),complete:result.text.length>=1200}; }
   async function confirmSubmit(jobId) {
     const session=sessions.get(jobId); if(!session||session.status!=='ready_for_final_confirmation') throw new Error('The browser agent is not waiting at final submission');
     const clicked=await session.page.evaluate(() => { const el=[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].find(node=>/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((node.innerText||node.value||'').trim())&&!node.disabled);if(!el)return false;el.click();return true; });
     if(!clicked) throw new Error('The final submit control is no longer available. Review the browser, then resume the agent.');
     clearInterval(session.timer); set(session,'submitted','Final application submission was confirmed and sent from the website.'); return publicSession(session);
   }
-  return { start,confirmSubmit,status:jobId=>publicSession(sessions.get(jobId)),drive:jobId=>drive(sessions.get(jobId)) };
+  return { start,attach,posting,confirmSubmit,status:jobId=>publicSession(sessions.get(jobId)),drive:jobId=>drive(sessions.get(jobId)) };
 }

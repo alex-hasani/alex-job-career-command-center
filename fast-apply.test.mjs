@@ -87,6 +87,9 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /api\/website-apply\/start/);
   assert.match(source, /api\/website-apply\/submit/);
   assert.match(source, /createWebsiteApplyAgent/);
+  assert.match(source, /websiteApply\.start\(job,null/);
+  assert.match(source, /websiteApply\.posting\(job\.id\)/);
+  assert.match(source, /website-apply-browser-jd/);
   assert.match(source, /hasActiveFastApplySend/);
   assert.match(source, /deferring restart until the active Fast Apply delivery finishes/);
 });

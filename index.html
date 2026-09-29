@@ -2925,7 +2925,8 @@
       }
       async function startWebsiteApply(id) {
         const job=jobs.find(item=>item.id===id); if(!job || !/^https?:\/\//i.test(String(job.url || ""))) return;
-        $("updated").textContent='Launching the private browser agent and preparing the reviewed PDFs…';
+        window.open(job.url,'_blank','noopener');
+        $("updated").textContent='Advert opened here. Launching the AI browser on HOME-PC, scanning the JD, and preparing the reviewed PDFs…';
         try {
           const response=await fetch('/api/website-apply/start',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,language:'de'})});
           const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'The browser agent could not start');
