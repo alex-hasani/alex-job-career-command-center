@@ -9,9 +9,10 @@ const START=/\b(?:apply now|apply for this job|jetzt bewerben|online bewerben|zu
 const LOGIN=/\b(?:sign in|log in|anmelden|einloggen|password|passwort)\b/i;
 const chromePath=['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'].find(existsSync);
 
-function normal(value='') { return String(value).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,' '); }
+function normal(value='') { return String(value).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,''); }
 export function fieldKindForHint(value='') {
   const hint=normal(value);
+  if(/legal.?first.?name|legal.?given.?name|amtlich(?:er|e).?vorname|rechtlich(?:er|e).?vorname/.test(hint)) return 'legalFirstName';
   if(/first.?name|given.?name|vorname/.test(hint)) return 'firstName';
   if(/last.?name|family.?name|surname|nachname/.test(hint)) return 'lastName';
   if(/full.?name|vorname.?nachname|ihr.?name|^name$/.test(hint.trim())) return 'name';
@@ -27,10 +28,31 @@ export function fieldKindForHint(value='') {
   if(/linkedin/.test(hint)) return 'linkedin';
   if(/github/.test(hint)) return 'github';
   if(/work.?auth|arbeitserlaubnis|work.?permit/.test(hint)) return 'authorisation';
+  if(/salutation|title|anrede/.test(hint)) return 'salutation';
+  if(/nationality|citizenship|staatsangehorigkeit|nationalitat/.test(hint)) return 'nationality';
+  if(/date.?of.?birth|birth.?date|dob|geburtsdatum/.test(hint)) return 'birthDate';
+  if(/highest.?qualification|degree|education|abschluss|hochster.?abschluss/.test(hint)) return 'highestQualification';
+  if(/driving.?licen[cs]e|fuhrerschein/.test(hint)) return 'drivingLicence';
+  if(/relocat|umzug|umzugsbereitschaft/.test(hint)) return 'relocation';
+  if(/business.?travel|travel.?willing|reisebereitschaft|dienstreise/.test(hint)) return 'businessTravel';
+  if(/visa.?sponsor|sponsorship/.test(hint)) return 'sponsorshipRequired';
+  if(/residence.?permit|immigration.?status|aufenthaltstitel|niederlassungserlaubnis/.test(hint)) return 'residencePermit';
   if(/salary|gehalt|compensation/.test(hint)) return 'salary';
   if(/start.?date|available.?from|availability|eintritt|beginn|verfügbar|kuendigung|kündigung/.test(hint)) return 'startDate';
   if(/anmerkung|comment|additional.?information|nachricht|message|motivation|anschreiben/.test(hint)) return 'notes';
   return '';
+}
+function isLegalConsentHint(value='') { return /privacy|datenschutz|terms|bedingungen|consent|einwillig|agreement|agb|data.?processing/.test(normal(value)); }
+function applicationCandidateScore({text='',href=''}={}) {
+  const label=normal(text), target=normal(href);
+  if(/mailto:|tel:|javascript:/.test(target)||/privacy|datenschutz|terms|agb|impressum|unsubscribe|share|facebook|linkedin|twitter/.test(`${label} ${target}`)) return -100;
+  if(FINAL.test(label)) return -100;
+  let score=0;
+  if(START.test(label)) score+=80;
+  if(/jetzt bewerben|apply now|start application|bewerbung starten/.test(label)) score+=35;
+  if(/\/(?:apply|application|bewerbung|career|jobs?)(?:[/?#]|$)/.test(target)) score+=30;
+  if(/continue application|bewerbung fortsetzen/.test(label)) score+=20;
+  return score;
 }
 function fileKindForHint(value='') {
   const hint=normal(value);
@@ -55,7 +77,7 @@ function applicationNote(job,lang,name,startAvailability) {
     ? `Guten Tag, ich bewerbe mich mit großem Interesse auf die Position ${job.title} bei ${job.company}. ${focus.de} ${startAvailability} Freundliche Grüße, ${name}`
     : `Hello, I am very interested in the ${job.title} position at ${job.company}. ${focus.en} ${startAvailability} Kind regards, ${name}`;
 }
-export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint, nextUploadKind, applicationNote }; }
+export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint, nextUploadKind, applicationNote, applicationCandidateScore, isLegalConsentHint }; }
 
 export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEvent=()=>{} }) {
   const sessions=new Map(); let context=null;
@@ -88,6 +110,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
         if(kind==='phone' && /ohne\s*(?:0|landes)|without\s*(?:0|country)/i.test(hint)) value=values.phoneSubscriber;
         else if(kind==='phone' && /(?:^|\D)0\s*1\d{2}/.test(hint)) value=values.phoneNational;
         if(kind==='startDate' && type==='date') value=values.startDateIso;
+        if(kind==='birthDate' && type==='date') value=values.birthDateIso;
         if(tag==='select') {
           const options=await control.locator('option').evaluateAll(nodes=>nodes.map(node=>({label:(node.textContent||'').trim(),value:node.value})));
           const wanted=[value,values.countryAlt].filter(Boolean).map(normal);
@@ -95,6 +118,18 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
           if(!option) continue; await control.selectOption(option.value);
         } else await control.fill(value);
         assigned.push(kind);
+      } catch {}
+    }
+    const radios=await page.locator('input[type="radio"]').all();
+    for(const radio of radios) {
+      try {
+        if(await radio.isDisabled()||await radio.isChecked()) continue;
+        const hint=await controlHint(radio); if(isLegalConsentHint(hint)) continue;
+        const kind=fieldKindForHint(hint), wanted=normal(values[kind]||''); if(!kind||!wanted) continue;
+        const option=normal([await radio.getAttribute('value'),await radio.getAttribute('aria-label'),hint].filter(Boolean).join(' '));
+        const noWanted=/^(?:no|nein)$/.test(wanted), yesWanted=/^(?:yes|ja)$/.test(wanted);
+        const matches=option.includes(wanted)||(noWanted&&/\b(?:no|nein)\b/.test(option))||(yesWanted&&/\b(?:yes|ja)\b/.test(option));
+        if(matches) { await radio.check(); assigned.push(kind); }
       } catch {}
     }
     for(const upload of await page.locator('input[type="file"]').all()) {
@@ -110,12 +145,38 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   async function requiredUnknowns(page) {
     return page.locator('input:required:not([type="file"]),textarea:required,select:required').evaluateAll(nodes=>nodes.filter(el=>!el.disabled&&((el.type==='checkbox'||el.type==='radio'?!el.checked:!String(el.value||'').trim())||!el.checkValidity())).map(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; return (label||el.getAttribute('aria-label')||el.placeholder||el.name||el.id||'required field').replace(/\s+/g,' ').trim(); }).slice(0,6));
   }
+  async function dismissCookieBanner(page) {
+    const controls=page.locator('[id*="cookie" i] button,[class*="cookie" i] button,[aria-label*="cookie" i] button,[id*="consent" i] button,[class*="consent" i] button,#onetrust-banner-sdk button');
+    const preferred=/^(?:reject all|decline|necessary only|nur notwendige|alle ablehnen|ablehnen)$/i;
+    const fallback=/^(?:accept all|allow all|alle akzeptieren|akzeptieren|zustimmen)$/i;
+    for(const matcher of [preferred,fallback]) for(let i=0;i<await controls.count();i++) {
+      const control=controls.nth(i), text=((await control.innerText().catch(()=>''))||(await control.getAttribute('aria-label'))||'').trim();
+      if(matcher.test(text)&&await control.isVisible()&&await control.isEnabled()) { await control.click().catch(()=>{}); return true; }
+    }
+    return false;
+  }
   async function navigateToApplication(session) {
     const page=session.page;
-    const destination=await page.evaluate(() => { const start=/apply now|apply for this job|jetzt bewerben|online bewerben|zur bewerbung|bewerben/i; const link=[...document.querySelectorAll('a[href]')].find(node=>start.test((node.innerText||'').trim())||/\/(?:apply|application|bewerbung)(?:[/?#]|$)/i.test(node.getAttribute('href')||'')); return link?new URL(link.getAttribute('href'),location.href).href:''; });
-    if(destination&&destination!==page.url()) { set(session,'opening_application','Advert scanned. Opening its application form in Google Chrome while the PDFs are prepared…'); await page.goto(destination,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); return true; }
-    const clicked=await page.locator('button,a[role="button"]').evaluateAll(nodes=>{ const start=/apply now|apply for this job|jetzt bewerben|online bewerben|zur bewerbung|bewerben/i, final=/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i; const el=nodes.find(node=>start.test((node.innerText||node.value||'').trim())&&!final.test((node.innerText||node.value||'').trim())&&!node.disabled); if(!el)return false;el.click();return true; });
-    if(clicked) { set(session,'opening_application','Advert scanned. Opening its application form while the PDFs are prepared…'); await page.waitForTimeout(1200); await page.bringToFront(); } return clicked;
+    if(session.navigationCount>=8) return false;
+    await dismissCookieBanner(page);
+    const candidates=await page.locator('a[href],button,input[type="button"],input[type="submit"],[role="button"]').evaluateAll(nodes=>nodes.map((node,index)=>({index,text:(node.innerText||node.value||node.getAttribute('aria-label')||'').trim(),href:node.href||'',disabled:Boolean(node.disabled),visible:Boolean(node.offsetWidth||node.offsetHeight||node.getClientRects().length)})).filter(item=>item.visible&&!item.disabled));
+    const scored=candidates.map(item=>({...item,score:applicationCandidateScore(item)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score);
+    const candidate=scored[0]; if(!candidate) return false;
+    session.navigationCount+=1;
+    set(session,'opening_application',`Following application step ${session.navigationCount} in Google Chrome…`);
+    if(candidate.href) {
+      const destination=new URL(candidate.href,page.url()).href;
+      if(session.visitedUrls.has(destination)) return false;
+      session.visitedUrls.add(destination);
+      await page.goto(destination,{waitUntil:'domcontentloaded',timeout:45000});
+    } else {
+      const beforePages=new Set((await browserContext()).pages());
+      await page.locator('a[href],button,input[type="button"],input[type="submit"],[role="button"]').nth(candidate.index).click();
+      await page.waitForTimeout(1200);
+      const newPage=(await browserContext()).pages().find(item=>!beforePages.has(item));
+      if(newPage) { session.page=newPage; await newPage.waitForLoadState('domcontentloaded').catch(()=>{}); session.visitedUrls.add(newPage.url()); }
+    }
+    await session.page.bringToFront(); return true;
   }
   async function advance(page) {
     const locator=page.locator('button:not([type="submit"]),input[type="button"],a[role="button"]');
@@ -126,13 +187,16 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The Google Chrome application window was closed before submission.'); }
     session.running=true;
     try {
+      await dismissCookieBanner(session.page);
       const state=await snapshot(session.page);
       if(state.captcha) return set(session,'waiting_for_login','Complete the CAPTCHA in Google Chrome; the agent will continue automatically.');
       if(state.password||(LOGIN.test(state.text)&&!/application|bewerbung/i.test(state.text))) return set(session,'waiting_for_login','Complete sign-in in Google Chrome; the agent will continue automatically.');
       const fields=await fill(session.page,session.values,session.files,session.uploadedFileKinds), unknowns=await requiredUnknowns(session.page), refreshed=await snapshot(session.page);
       if(refreshed.final) return set(session,'ready_for_final_confirmation',unknowns.length?`Review required fields in Chrome before final submission: ${unknowns.join(', ')}.`:'Form and two PDFs are ready. Review Google Chrome and confirm final submission in Alex Job.');
       if(unknowns.length) return set(session,'needs_review',`Complete these unknown required fields in Google Chrome: ${unknowns.join(', ')}. The agent will continue afterward.`);
-      const moved=await advance(session.page); session.steps+=1; set(session,moved?'advancing':'needs_review',moved?`Completed form step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised item(s). Review Google Chrome for a site-specific question or control.`);
+      let moved=await advance(session.page);
+      if(!moved) moved=await navigateToApplication(session);
+      session.steps+=1; set(session,moved?'advancing':'needs_review',moved?`Completed or opened application step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised item(s). Review Google Chrome for a site-specific question or control.`);
     } catch(error) { clearInterval(session.timer); set(session,'failed',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
   }
   async function attach(jobId,job,applicationPackage,language='de') {
@@ -141,14 +205,14 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     const form=profile.applicationForm||{}, applicantName=`${form.firstName||'Candidate'} ${form.lastName||''}`.trim(), startDate=new Date(); startDate.setMonth(startDate.getMonth()+3);
     const notes=applicationNote(job,lang,applicantName,form.startAvailability?.[lang]||'');
     session.files={cv:cv.path,letter:letter.path};
-    session.values={name:applicantName,firstName:form.firstName||'',lastName:form.lastName||'',email:profile.identity.email,phone:form.phoneInternational||profile.identity.phone,phoneNational:form.phoneNational||'',phoneSubscriber:form.phoneSubscriber||'',address:form.address||profile.identity.location,street:form.street||'',houseNumber:form.houseNumber||'',postalCode:form.postalCode||'',city:form.city||'',country:form.country?.[lang]||'',countryAlt:form.country?.[lang==='de'?'en':'de']||'',location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang],salary:lang==='de'?'80.000 EUR brutto pro Jahr, verhandelbar':'EUR 80,000 gross per year, negotiable',startDate:form.startAvailability?.[lang]||'',startDateIso:startDate.toISOString().slice(0,10),notes};
+    session.values={name:applicantName,firstName:form.firstName||'',legalFirstName:form.legalFirstName||form.firstName||'',lastName:form.lastName||'',salutation:form.salutation?.[lang]||'',nationality:form.nationality?.[lang]||'',birthDate:form.birthDateDisplay?.[lang]||form.birthDate||'',birthDateIso:form.birthDate||'',highestQualification:form.highestQualification?.[lang]||'',drivingLicence:form.drivingLicence||'',relocation:form.relocation?.[lang]||'',businessTravel:form.businessTravel?.[lang]||'',sponsorshipRequired:form.sponsorshipRequired?.[lang]||'',residencePermit:form.residencePermit?.[lang]||'',email:profile.identity.email,phone:form.phoneInternational||profile.identity.phone,phoneNational:form.phoneNational||'',phoneSubscriber:form.phoneSubscriber||'',address:form.address||profile.identity.location,street:form.street||'',houseNumber:form.houseNumber||'',postalCode:form.postalCode||'',city:form.city||'',country:form.country?.[lang]||'',countryAlt:form.country?.[lang==='de'?'en':'de']||'',location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang],salary:lang==='de'?'80.000 EUR brutto pro Jahr, verhandelbar':'EUR 80,000 gross per year, negotiable',startDate:form.startAvailability?.[lang]||'',startDateIso:startDate.toISOString().slice(0,10),notes};
     set(session,'preparing_form','Two reviewed PDF files are ready. Filling the website form in Google Chrome now…'); session.timer=setInterval(()=>drive(session),2000); session.timer.unref?.(); await drive(session); return publicSession(session);
   }
   async function start(job,applicationPackage=null,language='de') {
     if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
     const activeContext=await browserContext(), blankPages=activeContext.pages().filter(candidate=>candidate.url()==='about:blank'); let page=blankPages[0]; if(!page) page=await activeContext.newPage();
     for(const extra of blankPages.slice(1)) await extra.close().catch(()=>{});
-    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:null,values:{},uploadedFileKinds:new Set(),timer:null};
+    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,navigationCount:0,visitedUrls:new Set([job.url]),running:false,files:null,values:{},uploadedFileKinds:new Set(),timer:null};
     sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The Google Chrome application window was closed before submission.'); });
     await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened in Google Chrome. Reading its complete rendered description and application controls…'); return publicSession(session);
   }

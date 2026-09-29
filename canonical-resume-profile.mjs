@@ -19,7 +19,13 @@ export const canonicalResumeProfile = {
   },
   applicationForm: {
     firstName: 'Jordan',
+    preferredName: 'Jordan',
+    legalFirstName: 'Jordan',
     lastName: 'Example',
+    salutation: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    nationality: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    birthDate: '',
+    birthDateDisplay: { de:'Bitte lokal verifizieren', en:'Verify locally' },
     phoneInternational: '+49 000 0000000',
     phoneNational: '00000000000',
     phoneSubscriber: '0000000000',
@@ -29,6 +35,12 @@ export const canonicalResumeProfile = {
     postalCode: '70000',
     city: 'Stuttgart',
     country: { de:'Deutschland', en:'Germany' },
+    highestQualification: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    drivingLicence: 'Bitte lokal verifizieren',
+    relocation: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    businessTravel: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    sponsorshipRequired: { de:'Bitte lokal verifizieren', en:'Verify locally' },
+    residencePermit: { de:'Bitte lokal verifizieren', en:'Verify locally' },
     startAvailability: {
       de:'Starttermin im lokalen Profil verifizieren.',
       en:'Verify the start date in the local profile.'

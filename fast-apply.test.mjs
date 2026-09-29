@@ -34,6 +34,16 @@ test('website agent recognises common ATS fields and keeps continuation separate
   assert.equal(fieldKindForHint('Straße'),'street');
   assert.equal(fieldKindForHint('PLZ'),'postalCode');
   assert.equal(fieldKindForHint('Deine Anmerkungen'),'notes');
+  assert.equal(fieldKindForHint('Legal first name'),'legalFirstName');
+  assert.equal(fieldKindForHint('Anrede'),'salutation');
+  assert.equal(fieldKindForHint('Staatsangehörigkeit'),'nationality');
+  assert.equal(fieldKindForHint('Geburtsdatum'),'birthDate');
+  assert.equal(fieldKindForHint('Höchster Abschluss'),'highestQualification');
+  assert.equal(fieldKindForHint('Führerschein'),'drivingLicence');
+  assert.equal(fieldKindForHint('Umzugsbereitschaft'),'relocation');
+  assert.equal(fieldKindForHint('Reisebereitschaft'),'businessTravel');
+  assert.equal(fieldKindForHint('Visa sponsorship required'),'sponsorshipRequired');
+  assert.equal(fieldKindForHint('Aufenthaltstitel'),'residencePermit');
   assert.equal(websiteApplyInternals().fileKindForHint('Lebenslauf hochladen'),'cv');
   assert.equal(websiteApplyInternals().fileKindForHint('Weitere Dokumente'),'cv');
   assert.equal(websiteApplyInternals().fileKindForHint('Anschreiben'),'letter');
@@ -43,6 +53,9 @@ test('website agent recognises common ATS fields and keeps continuation separate
   assert.match(websiteApplyInternals().applicationNote({title:'Modern Workplace Administrator',company:'Example GmbH',description:'Microsoft 365 Intune Entra ID'},'de','Sample Candidate','In drei Monaten.'),/Microsoft 365, Intune, Entra ID/);
   assert.match('Continue',websiteApplyInternals().ADVANCE);
   assert.doesNotMatch('Continue',websiteApplyInternals().FINAL);
+  assert.ok(websiteApplyInternals().applicationCandidateScore({text:'Jetzt bewerben',href:'https://ats.example/apply/123'})>100);
+  assert.equal(websiteApplyInternals().applicationCandidateScore({text:'Datenschutz',href:'https://example.org/privacy'}),-100);
+  assert.equal(websiteApplyInternals().isLegalConsentHint('Ich stimme der Datenschutzerklärung zu'),true);
 });
 test('email copy uses the supplied canonical sender name and selected language', () => {
   const job = { title:'Infrastructure Engineer', company:'Example GmbH' };

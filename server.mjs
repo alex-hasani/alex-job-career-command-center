@@ -1391,6 +1391,30 @@ async function updateApplicationComment(id, applicationComment) {
   }, null, 2), 'utf8');
   return databaseJob;
 }
+function validatedApplicationUrl(value) {
+  const raw=String(value||'').trim(); let parsed;
+  try { parsed=new URL(raw); } catch { throw new Error('Enter a complete HTTP or HTTPS application link'); }
+  if(!['http:','https:'].includes(parsed.protocol)) throw new Error('Only HTTP or HTTPS application links are allowed');
+  const host=parsed.hostname.toLowerCase();
+  if(host==='localhost'||host==='127.0.0.1'||host==='::1'||/^10\.|^192\.168\.|^169\.254\.|^172\.(?:1[6-9]|2\d|3[01])\./.test(host)) throw new Error('The application link must be a public job website');
+  return parsed.href;
+}
+async function updateApplicationLink(id,value) {
+  const url=validatedApplicationUrl(value), state=await getCareerState();
+  await migrateDatabaseIfNeeded();
+  const previous=jobDb.listJobs({includeInactive:true}).find(job=>job.id===id);
+  if(!previous) throw new Error('Job was not found in SQLite');
+  const job=jobDb.updateApplication(id,{url});
+  const lead=(state.leads||[]).find(item=>item.id===id);
+  if(lead) {
+    const changedAt=new Date().toISOString();
+    const nextState={...state,leads:(state.leads||[]).map(item=>item.id===id?{...item,job_url:url,url,updated_at:changedAt}:item)};
+    try { await persistCareerState(nextState); }
+    catch(error) { jobDb.setMetadata('last_state_sync_error',JSON.stringify({operation:'application-link',id,message:error.message,at:changedAt})); }
+  }
+  queueExcelMirror('application-link');
+  return job;
+}
 async function applicationJob(id) {
   await migrateDatabaseIfNeeded();
   const job = jobDb.listJobs({ includeInactive:true }).find(item => item.id === id);
@@ -1449,7 +1473,7 @@ async function prepareWebsiteApplicationInBackground(job, language='de') {
   }
 }
 const types = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml' };
-const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send','/api/fast-apply/undo','/api/website-apply/start','/api/website-apply/submit']);
+const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-link','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send','/api/fast-apply/undo','/api/website-apply/start','/api/website-apply/submit']);
 function requireCurrentClientVersion(req, url) {
   if (!versionProtectedWrites.has(url.pathname) || !['POST','PUT','PATCH','DELETE'].includes(req.method || '')) return;
   if (req.headers['x-app-version'] === appVersion) return;
@@ -1526,6 +1550,11 @@ const server = http.createServer(async (req, res) => {
       const job = await updateApplicationComment(input.id, input.applicationComment);
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ ok:true, job }));
+    }
+    if (url.pathname === '/api/application-link' && req.method === 'POST') {
+      const input=await jsonBody(req), job=await updateApplicationLink(input.id,input.url);
+      res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,job}));
     }
     if (url.pathname === '/api/job-description' && req.method === 'POST') {
       const input = await jsonBody(req);
