@@ -1431,6 +1431,23 @@ async function storeRetrievedJobDescription(job, posting, reason='job-descriptio
   queueExcelMirror(reason);
   return assessJob(await applicationJob(job.id));
 }
+async function prepareWebsiteApplicationInBackground(job, language='de') {
+  try {
+    let preparedJob=job;
+    let applicationPackage=await coverLetters.readPackage(job);
+    const posting=await websiteApply.posting(job.id);
+    await websiteApply.prepareVisibleForm(job.id);
+    if (!applicationPackage?.quality?.applicationReady) {
+      preparedJob=await storeRetrievedJobDescription(job,posting,'website-apply-browser-jd');
+      applicationPackage=await coverLetters.prepare(preparedJob,'',{scope:'full',posting});
+      jobDb.upsertApplicationPackage(preparedJob.id,applicationPackage);
+    }
+    await websiteApply.attach(job.id,preparedJob,applicationPackage,language);
+  } catch (error) {
+    websiteApply.fail(job.id,error);
+    logActivity({action:'website_apply.background',result:'error',jobId:job.id,detail:error.message});
+  }
+}
 const types = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml' };
 const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send','/api/fast-apply/undo','/api/website-apply/start','/api/website-apply/submit']);
 function requireCurrentClientVersion(req, url) {
@@ -1640,16 +1657,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/website-apply/start' && req.method === 'POST') {
       const input=await jsonBody(req), job=await applicationJob(input.id);
       if (TERMINAL_APPLICATION_STATUSES.has(job.applicationStatus)) throw new Error('This application is already closed or recorded as submitted');
-      let applicationPackage=await coverLetters.readPackage(job);
-      let preparedJob=job;
-      let session=await websiteApply.start(job,null,input.language||'de');
-      if (!applicationPackage?.quality?.applicationReady) {
-        const posting=await websiteApply.posting(job.id);
-        preparedJob=await storeRetrievedJobDescription(job,posting,'website-apply-browser-jd');
-        applicationPackage=await coverLetters.prepare(preparedJob,'',{scope:'full',posting});
-        jobDb.upsertApplicationPackage(preparedJob.id,applicationPackage);
-      }
-      session=await websiteApply.attach(job.id,preparedJob,applicationPackage,input.language||'de');
+      const session=await websiteApply.start(job,null,input.language||'de');
+      prepareWebsiteApplicationInBackground(job,input.language||'de');
       res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ok:true,session}));
     }

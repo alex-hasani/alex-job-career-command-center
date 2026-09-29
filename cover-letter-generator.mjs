@@ -132,7 +132,7 @@ export function isCompleteJobDescription(text, minimumLength=MIN_RETRIEVED_JD_LE
   if (value.length < minimumLength || /\.\.\.|…/.test(value.slice(-80))) return false;
   const words = value.match(/[\p{L}\p{N}][\p{L}\p{N}+.#/-]*/gu) || [];
   const responsibilitySignals = [
-    /\b(aufgaben|verantwortung|tätigkeiten|das erwartet sie|ihre rolle|deine aufgaben)\b/i,
+    /\b(aufgaben|verantwortung|tätigkeiten|herausforderungen|das erwartet sie|ihre rolle|deine aufgaben)\b/i,
     /\b(responsibilities|what you(?:'|’)?ll do|what you will do|your role|the role|key duties)\b/i
   ].filter(pattern => pattern.test(value)).length;
   const requirementSignals = [
@@ -140,8 +140,9 @@ export function isCompleteJobDescription(text, minimumLength=MIN_RETRIEVED_JD_LE
     /\b(requirements|qualifications|what you(?:'|’)?ll bring|what you bring|skills|experience)\b/i
   ].filter(pattern => pattern.test(value)).length;
   const roleSignals = (value.match(/\b(server|infrastructure|cloud|system|administrator|engineer|betrieb|operations|support)\b/gi) || []).length;
-  const dutySignals = (value.match(/\b(responsible|develop|design|build|operate|maintain|support|manage|implement|monitor|troubleshoot|collaborate|lead|deliver|ensure|administer|verantwort|entwick|betreib|wart|unterstütz|implement|überwach|administrier)\w*/gi) || []).length;
+  const dutySignals = (value.match(/\b(responsible|develop|design|build|operate|maintain|support|manage|implement|monitor|troubleshoot|collaborate|lead|deliver|ensure|administer|verantwort|entwick|betreib|betrieb|betreuung|wart|unterstütz|implement|überwach|administrier|administration|mitarbeit)\w*/gi) || []).length;
   const structuredLongPosting = value.length >= Math.max(1500, minimumLength) && requirementSignals >= 1 && dutySignals >= 4;
+  const sectionedPosting = value.length >= minimumLength && words.length >= 90 && responsibilitySignals >= 1 && requirementSignals >= 1;
   // Pasted job descriptions often lose headings while copying from LinkedIn or
   // an ATS.  A sufficiently long, lexical document with several duty verbs is
   // still trustworthy; do not reject it solely because section labels vanished.
@@ -152,7 +153,7 @@ export function isCompleteJobDescription(text, minimumLength=MIN_RETRIEVED_JD_LE
     // without asking the user to manually curate individual sections.
     (words.length >= 180 && value.length >= 1500)
   );
-  return roleSignals >= 3 && ((responsibilitySignals >= 1 && requirementSignals >= 1) || structuredLongPosting) || substantialPastedPosting;
+  return sectionedPosting || (roleSignals >= 2 && structuredLongPosting) || substantialPastedPosting;
 }
 
 function identityTokens(value, excluded=new Set()) {
@@ -214,10 +215,10 @@ async function fetchReaderPosting(url) {
 async function fetchBrowserPosting(url) {
   const { chromium } = await import('playwright');
   const executablePath = [
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
   ].find(existsSync);
   if (!executablePath) throw new Error('no local browser is available');
   const browser = await chromium.launch({ headless:true, executablePath });
@@ -225,6 +226,8 @@ async function fetchBrowserPosting(url) {
     const page = await browser.newPage({ locale:'de-DE', userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36' });
     await page.goto(url.href, { waitUntil:'domcontentloaded', timeout:45000 });
     await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(500);
     const html = (await page.content()).slice(0, 1500000);
     const bodyText = cleanText(await page.locator('body').innerText({ timeout:10000 })).slice(0, MAX_JD_LENGTH);
     return { text:extractStructuredPosting(html) || extractMainPosting(html) || bodyText, method:'browser' };
@@ -354,7 +357,7 @@ async function retrievePosting(job, suppliedDescription='') {
       ? [fetchLinkedInGuestPosting, fetchReaderPosting, fetchDirectPosting, fetchBrowserPosting]
       : preferReader
         ? [fetchReaderPosting, fetchDirectPosting, fetchBrowserPosting]
-        : [fetchDirectPosting, fetchReaderPosting, fetchBrowserPosting];
+        : [fetchDirectPosting, fetchBrowserPosting, fetchReaderPosting];
     for (const attempt of attempts) {
       try {
         const result = await attempt(url);

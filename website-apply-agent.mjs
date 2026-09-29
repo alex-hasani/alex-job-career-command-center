@@ -3,74 +3,115 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-const FINAL=/\b(?:submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben)\b/i;
+const FINAL=/\b(?:submit|send application|submit application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben)\b/i;
 const ADVANCE=/\b(?:next|continue|weiter|fortfahren|proceed)\b/i;
+const START=/\b(?:apply now|apply for this job|jetzt bewerben|online bewerben|zur bewerbung|bewerben)\b/i;
 const LOGIN=/\b(?:sign in|log in|anmelden|einloggen|password|passwort)\b/i;
-const LABELS={name:['full name','name','vorname nachname','ihr name'],email:['email','e-mail','e mail','e-mail-adresse'],phone:['phone','telefon','mobile','mobil'],location:['location','standort','wohnort','city','stadt'],linkedin:['linkedin'],github:['github'],authorisation:['work authorization','arbeitserlaubnis','work permit']};
-const edgePath=['C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe','C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'].find(existsSync);
+const chromePath=['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'].find(existsSync);
 
-export function websiteApplyInternals() { return { FINAL, ADVANCE, LOGIN }; }
+function normal(value='') { return String(value).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,' '); }
+export function fieldKindForHint(value='') {
+  const hint=normal(value);
+  if(/first.?name|given.?name|vorname/.test(hint)) return 'firstName';
+  if(/last.?name|family.?name|surname|nachname/.test(hint)) return 'lastName';
+  if(/full.?name|vorname.?nachname|ihr.?name|^name$/.test(hint.trim())) return 'name';
+  if(/e.?mail/.test(hint)) return 'email';
+  if(/phone|telefon|mobile|mobil/.test(hint)) return 'phone';
+  if(/location|standort|wohnort|city|stadt|address|adresse/.test(hint)) return 'location';
+  if(/linkedin/.test(hint)) return 'linkedin';
+  if(/github/.test(hint)) return 'github';
+  if(/work.?auth|arbeitserlaubnis|work.?permit/.test(hint)) return 'authorisation';
+  if(/salary|gehalt|compensation/.test(hint)) return 'salary';
+  return '';
+}
+function fileKindForHint(value='') {
+  const hint=normal(value);
+  if(/cover|letter|anschreiben|motivationsschreiben/.test(hint)) return 'letter';
+  if(/resume|curriculum|lebenslauf|\bcv\b/.test(hint)) return 'cv';
+  return 'both';
+}
+export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint }; }
 
 export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEvent=()=>{} }) {
   const sessions=new Map(); let context=null;
-  const profileDir=join(workspace,'State','website-application-browser-profile');
+  const profileDir=join(workspace,'State','website-application-chrome-profile');
   async function browserContext() {
-    if (context) return context;
+    if(context) return context;
+    if(!chromePath) throw new Error('Google Chrome is not installed in a supported location on HOME-PC');
     await mkdir(profileDir,{recursive:true});
     const { chromium }=await import('playwright');
-    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:edgePath,viewport:null,args:['--start-maximized','--new-window']});
+    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:chromePath,viewport:null,locale:'de-DE',args:['--start-maximized','--new-window']});
     context.on('close',()=>{ context=null; }); return context;
   }
-  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Microsoft Edge on HOME-PC'} : null;
-  function set(session,status,message) { const changed=session.status!==status||session.message!==message; session.status=status; session.message=message; session.updatedAt=new Date().toISOString(); if(changed) onEvent({action:`website_apply.${status}`,result:'ok',jobId:session.jobId,detail:message}); }
-  async function snapshot(page) { return page.evaluate(() => ({text:document.body?.innerText?.slice(0,24000)||'',password:Boolean(document.querySelector('input[type="password"]')),final:[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].some(el=>/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((el.innerText||el.value||'').trim()))})); }
-  async function fill(page,values,files) {
-    const assigned=await page.evaluate(({labels,values})=>{
-      const done=[]; for(const control of document.querySelectorAll('input:not([type="hidden"]):not([type="password"]),textarea')) {
-        if(control.disabled||control.value||/checkbox|radio|file|submit|button/i.test(control.type||'')) continue;
-        const label=control.id?document.querySelector(`label[for="${CSS.escape(control.id)}"]`)?.innerText:'';
-        const hint=[label,control.name,control.id,control.placeholder,control.getAttribute('aria-label')].filter(Boolean).join(' ').toLowerCase();
-        const key=Object.keys(labels).find(name=>labels[name].some(term=>hint.includes(term))); if(!key||!values[key]) continue;
-        control.value=values[key]; control.dispatchEvent(new Event('input',{bubbles:true})); control.dispatchEvent(new Event('change',{bubbles:true})); done.push(key);
-      } return [...new Set(done)];
-    },{labels:LABELS,values});
-    for(const input of await page.locator('input[type="file"]').all()) { try { await input.setInputFiles(files); } catch {} }
-    return assigned;
+  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Google Chrome on HOME-PC'} : null;
+  function set(session,status,message) { const changed=session.status!==status||session.message!==message; session.status=status; session.message=message; session.updatedAt=new Date().toISOString(); if(changed) onEvent({action:`website_apply.${status}`,result:status==='failed'?'error':'ok',jobId:session.jobId,detail:message}); return publicSession(session); }
+  async function snapshot(page) {
+    return page.evaluate(() => { const visible=node=>Boolean(node&&(node.offsetWidth||node.offsetHeight||node.getClientRects().length)); const controls=[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].filter(visible); return {text:document.body?.innerText?.slice(0,30000)||'',password:Boolean(document.querySelector('input[type="password"]')),captcha:Boolean(document.querySelector('iframe[src*="captcha" i],[class*="captcha" i],[id*="captcha" i]')),final:controls.some(el=>/submit|send application|submit application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((el.innerText||el.value||'').trim()))}; });
   }
-  async function advance(page) { return page.evaluate(() => { const safeStep=/next|continue|weiter|fortfahren|proceed/i, startApplication=/apply now|jetzt bewerben|bewerben/i, final=/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i; const el=[...document.querySelectorAll('button,a[role="button"],a[href]')].find(node=>{const text=(node.innerText||node.value||'').trim(); const ordinaryStep=safeStep.test(text)&&node.tagName!=='A'&&node.type!=='submit'; const safeStart=node.tagName==='A'&&Boolean(node.getAttribute('href'))&&startApplication.test(text); return (ordinaryStep||safeStart)&&!final.test(text)&&!node.disabled;});if(!el)return false;el.click();return true; }); }
+  async function controlHint(control) {
+    return control.evaluate(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; const wrapping=el.closest('label')?.innerText||el.parentElement?.innerText||''; return [label,wrapping,el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.autocomplete].filter(Boolean).join(' ').slice(0,1000); });
+  }
+  async function fill(page,values,files) {
+    const assigned=[];
+    const controls=await page.locator('input:not([type="hidden"]):not([type="password"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),textarea').all();
+    for(const control of controls) { try { if(await control.isDisabled()||(await control.inputValue()).trim()) continue; const kind=fieldKindForHint(await controlHint(control)); if(!kind||!values[kind]) continue; await control.fill(values[kind]); assigned.push(kind); } catch {} }
+    for(const upload of await page.locator('input[type="file"]').all()) { try { const kind=fileKindForHint(await controlHint(upload)); await upload.setInputFiles(kind==='cv'?[files.cv]:kind==='letter'?[files.letter]:[files.cv,files.letter]); assigned.push(kind==='both'?'two PDF files':`${kind} PDF`); } catch {} }
+    return [...new Set(assigned)];
+  }
+  async function requiredUnknowns(page) {
+    return page.locator('input:required,textarea:required,select:required').evaluateAll(nodes=>nodes.filter(el=>!el.disabled&&(el.type==='checkbox'||el.type==='radio'?!el.checked:!String(el.value||'').trim())).map(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; return (label||el.getAttribute('aria-label')||el.placeholder||el.name||el.id||'required field').replace(/\s+/g,' ').trim(); }).slice(0,6));
+  }
+  async function navigateToApplication(session) {
+    const page=session.page;
+    const destination=await page.evaluate(() => { const start=/apply now|apply for this job|jetzt bewerben|online bewerben|zur bewerbung|bewerben/i; const link=[...document.querySelectorAll('a[href]')].find(node=>start.test((node.innerText||'').trim())||/\/(?:apply|application|bewerbung)(?:[/?#]|$)/i.test(node.getAttribute('href')||'')); return link?new URL(link.getAttribute('href'),location.href).href:''; });
+    if(destination&&destination!==page.url()) { set(session,'opening_application','Advert scanned. Opening its application form in Google Chrome while the PDFs are prepared…'); await page.goto(destination,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); return true; }
+    const clicked=await page.locator('button,a[role="button"]').evaluateAll(nodes=>{ const start=/apply now|apply for this job|jetzt bewerben|online bewerben|zur bewerbung|bewerben/i, final=/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i; const el=nodes.find(node=>start.test((node.innerText||node.value||'').trim())&&!final.test((node.innerText||node.value||'').trim())&&!node.disabled); if(!el)return false;el.click();return true; });
+    if(clicked) { set(session,'opening_application','Advert scanned. Opening its application form while the PDFs are prepared…'); await page.waitForTimeout(1200); await page.bringToFront(); } return clicked;
+  }
+  async function advance(page) {
+    const locator=page.locator('button:not([type="submit"]),input[type="button"],a[role="button"]');
+    for(let i=0;i<await locator.count();i++) { const control=locator.nth(i), text=((await control.innerText().catch(()=>''))||(await control.getAttribute('value'))||'').trim(); if(ADVANCE.test(text)&&!FINAL.test(text)&&await control.isEnabled()&&await control.isVisible()) { await control.click(); return true; } } return false;
+  }
   async function drive(session) {
-    if(!session||session.running||['submitted','ready_for_final_confirmation'].includes(session.status)) return;
-    if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The AI browser window was closed before submission.'); }
-    session.running=true; try {
-      const pageState=await snapshot(session.page);
-      if(pageState.password || (LOGIN.test(pageState.text)&&!/application|bewerbung/i.test(pageState.text))) return set(session,'waiting_for_login','Complete sign-in or CAPTCHA in the opened browser; the agent will continue automatically.');
-      const fields=await fill(session.page,session.values,session.files);
-      if(pageState.final) return set(session,'ready_for_final_confirmation','Form preparation is complete. Review the browser and confirm final submission in Alex Job.');
-      const moved=await advance(session.page); session.steps+=1;
-      set(session,moved?'advancing':'review_needed',moved?`Completed step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised field(s). Complete unknown required fields in the browser.`);
-    } catch(error) { clearInterval(session.timer); set(session,'needs_review',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
+    if(!session||session.running||!session.files||['submitted','ready_for_final_confirmation','closed','failed'].includes(session.status)) return;
+    if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The Google Chrome application window was closed before submission.'); }
+    session.running=true;
+    try {
+      const state=await snapshot(session.page);
+      if(state.captcha) return set(session,'waiting_for_login','Complete the CAPTCHA in Google Chrome; the agent will continue automatically.');
+      if(state.password||(LOGIN.test(state.text)&&!/application|bewerbung/i.test(state.text))) return set(session,'waiting_for_login','Complete sign-in in Google Chrome; the agent will continue automatically.');
+      const fields=await fill(session.page,session.values,session.files), unknowns=await requiredUnknowns(session.page), refreshed=await snapshot(session.page);
+      if(refreshed.final) return set(session,'ready_for_final_confirmation',unknowns.length?`Review required fields in Chrome before final submission: ${unknowns.join(', ')}.`:'Form and two PDFs are ready. Review Google Chrome and confirm final submission in Alex Job.');
+      if(unknowns.length) return set(session,'needs_review',`Complete these unknown required fields in Google Chrome: ${unknowns.join(', ')}. The agent will continue afterward.`);
+      const moved=await advance(session.page); session.steps+=1; set(session,moved?'advancing':'needs_review',moved?`Completed form step ${session.steps}; continuing automatically.`:`Filled ${fields.length} recognised item(s). Review Google Chrome for a site-specific question or control.`);
+    } catch(error) { clearInterval(session.timer); set(session,'failed',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
   }
   async function attach(jobId,job,applicationPackage,language='de') {
-    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The AI browser window is no longer open');
-    const lang=['de','en'].includes(language)?language:'de';
-    const cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion);
-    session.files=[cv.path,letter.path]; session.values={name:profile.identity.name,email:profile.identity.email,phone:profile.identity.phone,location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang]};
-    set(session,'preparing_form','Two reviewed PDFs are ready. Starting form completion in the AI browser.');
-    session.timer=setInterval(()=>drive(session),2500); session.timer.unref?.(); await drive(session); return publicSession(session);
+    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open');
+    const lang=['de','en'].includes(language)?language:'de', cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion), parts=String(profile.identity.name||'').replace(/\([^)]*\)/g,' ').trim().split(/\s+/);
+    session.files={cv:cv.path,letter:letter.path}; session.values={name:profile.identity.name,firstName:parts[0],lastName:parts.at(-1),email:profile.identity.email,phone:profile.identity.phone,location:profile.identity.location,linkedin:profile.identity.linkedin,github:profile.identity.github,authorisation:profile.identity.workAuthorisation[lang],salary:lang==='de'?'80.000 EUR brutto pro Jahr, verhandelbar':'EUR 80,000 gross per year, negotiable'};
+    set(session,'preparing_form','Two reviewed PDF files are ready. Filling the website form in Google Chrome now…'); session.timer=setInterval(()=>drive(session),2000); session.timer.unref?.(); await drive(session); return publicSession(session);
   }
   async function start(job,applicationPackage=null,language='de') {
     if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
-    const activeContext=await browserContext(), page=activeContext.pages().find(candidate=>candidate.url()==='about:blank')||await activeContext.newPage();
-    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening and scanning the exact job advert in Microsoft Edge on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:[],values:{},timer:null};
-    sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The AI browser window was closed before submission.'); }); await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront();
-    if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened. Scanning the rendered job description before preparing PDFs.'); return publicSession(session);
+    const activeContext=await browserContext(); let page=activeContext.pages().find(candidate=>candidate.url()==='about:blank'); if(!page) page=await activeContext.newPage();
+    const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,running:false,files:null,values:{},timer:null};
+    sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The Google Chrome application window was closed before submission.'); });
+    await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened in Google Chrome. Reading its complete rendered description and application controls…'); return publicSession(session);
   }
-  async function posting(jobId) { const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The AI browser window is no longer open'); const result=await session.page.evaluate(()=>({text:(document.body?.innerText||'').replace(/\s+/g,' ').trim(),url:location.href,title:document.title})); return {...result,source:'exact posting rendered in AI browser',retrievedAt:new Date().toISOString(),complete:result.text.length>=1200}; }
+  async function posting(jobId) {
+    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open');
+    await session.page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight)); await session.page.waitForTimeout(500);
+    const result=await session.page.evaluate(()=>({text:(document.body?.innerText||'').replace(/\s+/g,' ').trim(),html:document.documentElement?.outerHTML||'',url:location.href,title:document.title}));
+    const emails=result.html.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)?.join(' ')||''; return {...result,text:`${result.text} ${emails}`.trim(),source:'exact posting rendered in Google Chrome',retrievedAt:new Date().toISOString(),complete:result.text.length>=900};
+  }
+  async function prepareVisibleForm(jobId) { const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open'); return navigateToApplication(session); }
+  function fail(jobId,error) { const session=sessions.get(jobId); if(session) { clearInterval(session.timer); return set(session,'failed',`Website application preparation failed: ${error.message}`); } }
   async function confirmSubmit(jobId) {
     const session=sessions.get(jobId); if(!session||session.status!=='ready_for_final_confirmation') throw new Error('The browser agent is not waiting at final submission');
-    const clicked=await session.page.evaluate(() => { const el=[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].find(node=>/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((node.innerText||node.value||'').trim())&&!node.disabled);if(!el)return false;el.click();return true; });
-    if(!clicked) throw new Error('The final submit control is no longer available. Review the browser, then resume the agent.');
-    clearInterval(session.timer); set(session,'submitted','Final application submission was confirmed and sent from the website.'); return publicSession(session);
+    const controls=session.page.locator('button,input[type="submit"],input[type="button"]'); let clicked=false;
+    for(let i=0;i<await controls.count();i++) { const control=controls.nth(i), text=((await control.innerText().catch(()=>''))||(await control.getAttribute('value'))||'').trim(); if(FINAL.test(text)&&await control.isEnabled()&&await control.isVisible()) { await control.click(); clicked=true; break; } }
+    if(!clicked) throw new Error('The final submit control is no longer available. Review Google Chrome, then resume the agent.'); clearInterval(session.timer); set(session,'submitted','Final application submission was confirmed and sent from the website.'); return publicSession(session);
   }
-  return { start,attach,posting,confirmSubmit,status:jobId=>publicSession(sessions.get(jobId)),drive:jobId=>drive(sessions.get(jobId)) };
+  return { start,attach,posting,prepareVisibleForm,fail,confirmSubmit,status:jobId=>publicSession(sessions.get(jobId)),drive:jobId=>drive(sessions.get(jobId)) };
 }

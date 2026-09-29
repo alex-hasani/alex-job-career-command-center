@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { createFastApplyService, fastApplyInternals } from './fast-apply-service.mjs';
-import { extractGoogleResultUrls } from './cover-letter-generator.mjs';
+import { extractGoogleResultUrls, isCompleteJobDescription } from './cover-letter-generator.mjs';
+import { fieldKindForHint, websiteApplyInternals } from './website-apply-agent.mjs';
 
 test('recipient discovery keeps application contacts and rejects delivery/privacy addresses', () => {
   const found = fastApplyInternals.candidates(
@@ -22,6 +23,16 @@ test('job-description recipient overrides a conflicting saved contact', () => {
   const found = fastApplyInternals.candidates({ recruiterContact:'previous-contact@example.org' }, posting);
   assert.equal(found[0].email, 'applications@example.org');
   assert.deepEqual(fastApplyInternals.postingRecipients(posting), ['applications@example.org']);
+});
+test('German challenge and qualification sections count as a complete advert', () => {
+  const text=`IT-Systemadministrator Microsoft 365. Die Herausforderungen dieses IT-Jobs. ${'Betreuung und Administration von Microsoft Systemen und Mitarbeit an Infrastruktur-Projekten. '.repeat(18)} Deine Qualifikation für diesen IT-Job. Erfahrung und Kenntnisse in Microsoft 365, Intune, Active Directory und Entra ID.`;
+  assert.equal(isCompleteJobDescription(text),true);
+});
+test('website agent recognises common ATS fields and keeps continuation separate from submission', () => {
+  assert.equal(fieldKindForHint('Vorname / First name'),'firstName');
+  assert.equal(fieldKindForHint('Gehaltsvorstellung'),'salary');
+  assert.match('Continue',websiteApplyInternals().ADVANCE);
+  assert.doesNotMatch('Continue',websiteApplyInternals().FINAL);
 });
 test('email copy uses the supplied canonical sender name and selected language', () => {
   const job = { title:'Infrastructure Engineer', company:'Example GmbH' };
