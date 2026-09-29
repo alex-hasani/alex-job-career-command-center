@@ -2928,7 +2928,7 @@
         window.open(job.url,'_blank','noopener');
         $("updated").textContent='Advert opened here. Launching the AI browser on HOME-PC, scanning the JD, and preparing the reviewed PDFs…';
         try {
-          const response=await fetch('/api/website-apply/start',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,language:'de'})});
+          const response=await fetch('/api/website-apply/start',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,language:'de'}),keepalive:true});
           const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'The browser agent could not start');
           $("updated").textContent=`Website agent started: ${data.session.message}`;
           stopWebsiteApplyPolling(id); websiteApplyPolls.set(id,setInterval(()=>pollWebsiteApply(id).catch(error=>{ $("updated").textContent=error.message; }),2500));
