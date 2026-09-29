@@ -126,7 +126,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
         if(await radio.isDisabled()||await radio.isChecked()) continue;
         const hint=await controlHint(radio); if(isLegalConsentHint(hint)) continue;
         const kind=fieldKindForHint(hint), wanted=normal(values[kind]||''); if(!kind||!wanted) continue;
-        const option=normal([await radio.getAttribute('value'),await radio.getAttribute('aria-label'),hint].filter(Boolean).join(' '));
+        const option=normal(await radio.evaluate(el=>{ const label=el.id?document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText:''; return [el.value,el.getAttribute('aria-label'),label,el.closest('label')?.innerText].filter(Boolean).join(' '); }));
         const noWanted=/^(?:no|nein)$/.test(wanted), yesWanted=/^(?:yes|ja)$/.test(wanted);
         const matches=option.includes(wanted)||(noWanted&&/\b(?:no|nein)\b/.test(option))||(yesWanted&&/\b(?:yes|ja)\b/.test(option));
         if(matches) { await radio.check(); assigned.push(kind); }
