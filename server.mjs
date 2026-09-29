@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { openJobDatabase } from './job-database.mjs';
 import { createCoverLetterService } from './cover-letter-generator.mjs';
 import { createFastApplyService } from './fast-apply-service.mjs';
+import { createWebsiteApplyAgent } from './website-apply-agent.mjs';
 import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
@@ -40,7 +41,9 @@ const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
 const FAST_APPLY_BCC = process.env.FAST_APPLY_BCC || 'candidate-copy@example.org';
 const FAST_APPLY_DAILY_LIMIT = 10;
+const TERMINAL_APPLICATION_STATUSES = new Set(['Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed']);
 const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name, bccEmail:FAST_APPLY_BCC });
+const websiteApply = createWebsiteApplyAgent({ workspace, coverLetters, profile:canonicalResumeProfile, onEvent:logActivity });
 const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
 const fastApplyErrorKey = jobId => `fast_apply_error:${jobId}`;
 function readFastApplyDelivery(jobId) {
@@ -1429,7 +1432,7 @@ async function storeRetrievedJobDescription(job, posting, reason='job-descriptio
   return assessJob(await applicationJob(job.id));
 }
 const types = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml' };
-const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send','/api/fast-apply/undo']);
+const versionProtectedWrites = new Set(['/api/application-status','/api/application-comment','/api/application-package','/api/job-description','/api/saved-searches','/api/saved-searches/active','/api/email-reconciliation-request','/api/fast-apply/preview','/api/fast-apply/send','/api/fast-apply/undo','/api/website-apply/start','/api/website-apply/submit']);
 function requireCurrentClientVersion(req, url) {
   if (!versionProtectedWrites.has(url.pathname) || !['POST','PUT','PATCH','DELETE'].includes(req.method || '')) return;
   if (req.headers['x-app-version'] === appVersion) return;
@@ -1633,7 +1636,33 @@ const server = http.createServer(async (req, res) => {
       logActivity({ action:'fast_apply.queue', result:'queued', jobId:job.id, detail:'Held for 15 seconds before Gmail delivery' });
       res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ok:true,pending:publicFastApplyPending(pending)}));
-    }    if (url.pathname === '/api/sync-excel' && req.method === 'POST') {
+    }
+    if (url.pathname === '/api/website-apply/start' && req.method === 'POST') {
+      const input=await jsonBody(req), job=await applicationJob(input.id);
+      if (TERMINAL_APPLICATION_STATUSES.has(job.applicationStatus)) throw new Error('This application is already closed or recorded as submitted');
+      let applicationPackage=await coverLetters.readPackage(job);
+      if (!applicationPackage?.quality?.applicationReady) {
+        applicationPackage=await coverLetters.prepare(job,'',{scope:'full'});
+        jobDb.upsertApplicationPackage(job.id,applicationPackage);
+      }
+      const session=await websiteApply.start(job,applicationPackage,input.language||'de');
+      res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,session}));
+    }
+    if (url.pathname === '/api/website-apply/status' && req.method === 'GET') {
+      const session=websiteApply.status(url.searchParams.get('id'));
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,session}));
+    }
+    if (url.pathname === '/api/website-apply/submit' && req.method === 'POST') {
+      const input=await jsonBody(req);
+      if (input.confirmed !== true) throw new Error('Final website submission confirmation is required');
+      const session=await websiteApply.confirmSubmit(input.id);
+      const job=await updateApplicationStatus(input.id,'Applied');
+      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
+      return res.end(JSON.stringify({ok:true,session,job}));
+    }
+    if (url.pathname === '/api/sync-excel' && req.method === 'POST') {
       const result = await syncExcelMirror('manual-sync');
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ ok:true, ...result, excelSync:excelSyncInfo() }));

@@ -84,6 +84,9 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /FAST_APPLY_DAILY_LIMIT = 10/);
   assert.match(source, /FAST_APPLY_BCC/);
   assert.match(source, /api\/fast-apply\/undo/);
+  assert.match(source, /api\/website-apply\/start/);
+  assert.match(source, /api\/website-apply\/submit/);
+  assert.match(source, /createWebsiteApplyAgent/);
   assert.match(source, /hasActiveFastApplySend/);
   assert.match(source, /deferring restart until the active Fast Apply delivery finishes/);
 });
