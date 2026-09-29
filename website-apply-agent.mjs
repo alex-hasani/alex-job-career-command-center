@@ -37,7 +37,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     for(const input of await page.locator('input[type="file"]').all()) { try { await input.setInputFiles(files); } catch {} }
     return assigned;
   }
-  async function advance(page) { return page.evaluate(() => { const el=[...document.querySelectorAll('button,a[role="button"]')].find(node=>{const text=(node.innerText||node.value||'').trim();return /next|continue|weiter|fortfahren|proceed/i.test(text)&&!/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test(text)&&!node.disabled&&node.type!=='submit';});if(!el)return false;el.click();return true; }); }
+  async function advance(page) { return page.evaluate(() => { const safeStep=/next|continue|weiter|fortfahren|proceed/i, startApplication=/apply now|jetzt bewerben|bewerben/i, final=/submit|send application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i; const el=[...document.querySelectorAll('button,a[role="button"],a[href]')].find(node=>{const text=(node.innerText||node.value||'').trim(); const ordinaryStep=safeStep.test(text)&&node.tagName!=='A'&&node.type!=='submit'; const safeStart=node.tagName==='A'&&Boolean(node.getAttribute('href'))&&startApplication.test(text); return (ordinaryStep||safeStart)&&!final.test(text)&&!node.disabled;});if(!el)return false;el.click();return true; }); }
   async function drive(session) {
     if(!session||session.running||['submitted','ready_for_final_confirmation'].includes(session.status)) return;
     session.running=true; try {
