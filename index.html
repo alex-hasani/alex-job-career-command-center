@@ -2931,7 +2931,7 @@
       }
       async function startWebsiteApply(id) {
         const job=jobs.find(item=>item.id===id); if(!job || !/^https?:\/\//i.test(String(job.url || ""))) return;
-        $("updated").textContent='Starting the Google Chrome website agent on HOME-PC…';
+        $("updated").textContent='Connecting to the normal Chrome Default profile on this computer… On the first connection, click Allow in Chrome. The job will then open in a new tab and continue automatically.';
         try {
           const response=await fetch('/api/website-apply/start',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,language:'de'}),keepalive:true});
           const data=await readWriteResponse(response); if(!response.ok) throw new Error(data.error || 'The browser agent could not start');

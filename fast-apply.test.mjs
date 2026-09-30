@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createFastApplyService, fastApplyInternals } from './fast-apply-service.mjs';
 import { extractGoogleResultUrls, isCompleteJobDescription } from './cover-letter-generator.mjs';
 import { fieldKindForHint, websiteApplyInternals } from './website-apply-agent.mjs';
+import { chromeDevtoolsInternals } from './chrome-devtools-client.mjs';
 
 test('recipient discovery keeps application contacts and rejects delivery/privacy addresses', () => {
   const found = fastApplyInternals.candidates(
@@ -56,6 +57,19 @@ test('website agent recognises common ATS fields and keeps continuation separate
   assert.ok(websiteApplyInternals().applicationCandidateScore({text:'Jetzt bewerben',href:'https://ats.example/apply/123'})>100);
   assert.equal(websiteApplyInternals().applicationCandidateScore({text:'Datenschutz',href:'https://example.org/privacy'}),-100);
   assert.equal(websiteApplyInternals().isLegalConsentHint('Ich stimme der Datenschutzerklärung zu'),true);
+});
+
+test('Chrome bridge parses evaluated values, pages, and one labelled upload control', () => {
+  const bridge=chromeDevtoolsInternals();
+  const evaluated={content:[{type:'text',text:'Script ran on page and returned:\n```json\n{"ready":true}\n```'}]};
+  assert.deepEqual(bridge.evaluationValue(evaluated),{ready:true});
+  const snapshot={content:[{type:'text',text:'uid=4_18 button "Choose file" description="alex-cv-pdf-upload"'}]};
+  assert.equal(bridge.uploadUid(snapshot,'alex-cv-pdf-upload'),'4_18');
+  const pages={content:[{type:'text',text:'## Pages\n1: Existing tab (https://example.org/)\n2: Career Command Center (http://127.0.0.1:8787/) [selected]'}]};
+  assert.deepEqual(bridge.resultPages(pages).map(page=>({id:page.id,url:page.url,selected:page.selected})),[
+    {id:1,url:'https://example.org/',selected:false},
+    {id:2,url:'http://127.0.0.1:8787/',selected:true}
+  ]);
 });
 test('email copy uses the supplied canonical sender name and selected language', () => {
   const job = { title:'Infrastructure Engineer', company:'Example GmbH' };
@@ -124,6 +138,11 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /websiteApply\.start\(job,null/);
   assert.match(source, /websiteApply\.posting\(job\.id\)/);
   assert.match(source, /website-apply-browser-jd/);
+  const websiteAgent = await readFile(new URL('./website-apply-agent.mjs', import.meta.url), 'utf8');
+  assert.match(websiteAgent, /createChromeDevtoolsClient/);
+  assert.match(websiteAgent, /chrome\.newPage\(job\.url\)/);
+  assert.match(websiteAgent, /Existing Google Chrome Default profile/);
+  assert.doesNotMatch(websiteAgent, /connectOverCDP|launchPersistentContext|context\.close\(\)/);
   assert.match(source, /hasActiveFastApplySend/);
   assert.match(source, /deferring restart until the active Fast Apply delivery finishes/);
 });
