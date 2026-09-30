@@ -1,6 +1,4 @@
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const FINAL=/\b(?:submit|send application|submit application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben)\b/i;
@@ -80,17 +78,23 @@ function applicationNote(job,lang,name,startAvailability) {
 export function websiteApplyInternals() { return { FINAL, ADVANCE, START, LOGIN, fieldKindForHint, fileKindForHint, nextUploadKind, applicationNote, applicationCandidateScore, isLegalConsentHint }; }
 
 export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEvent=()=>{} }) {
-  const sessions=new Map(); let context=null;
-  const profileDir=join(workspace,'State','website-application-chrome-profile');
+  const sessions=new Map(); let browser=null, context=null;
   async function browserContext() {
     if(context) return context;
     if(!chromePath) throw new Error('Google Chrome is not installed in a supported location on HOME-PC');
-    await mkdir(profileDir,{recursive:true});
     const { chromium }=await import('playwright');
-    context=await chromium.launchPersistentContext(profileDir,{headless:false,executablePath:chromePath,viewport:null,locale:'de-DE',ignoreDefaultArgs:['--no-sandbox'],args:['--start-maximized','--new-window']});
-    context.on('close',()=>{ context=null; }); return context;
+    try {
+      browser=await chromium.connectOverCDP('chrome',{timeout:45000});
+    } catch {
+      browser=null;
+      throw new Error('Connect Chrome first: open chrome://inspect/#remote-debugging, enable remote debugging, then click Allow when Chrome asks.');
+    }
+    context=browser.contexts()[0];
+    if(!context) { browser=null; throw new Error('Chrome connected without an accessible default profile.'); }
+    browser.on('disconnected',()=>{ browser=null; context=null; });
+    return context;
   }
-  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Google Chrome on HOME-PC'} : null;
+  const publicSession=session=>session ? {id:session.id,jobId:session.jobId,status:session.status,message:session.message,startedAt:session.startedAt,updatedAt:session.updatedAt,steps:session.steps,browser:'Existing Google Chrome profile on HOME-PC'} : null;
   function set(session,status,message) { const changed=session.status!==status||session.message!==message; session.status=status; session.message=message; session.updatedAt=new Date().toISOString(); if(changed) onEvent({action:`website_apply.${status}`,result:status==='failed'?'error':'ok',jobId:session.jobId,detail:message}); return publicSession(session); }
   async function snapshot(page) {
     return page.evaluate(() => { const visible=node=>Boolean(node&&(node.offsetWidth||node.offsetHeight||node.getClientRects().length)); const controls=[...document.querySelectorAll('button,input[type="submit"],input[type="button"]')].filter(visible); return {text:document.body?.innerText?.slice(0,30000)||'',password:Boolean(document.querySelector('input[type="password"]')),captcha:Boolean(document.querySelector('iframe[src*="captcha" i],[class*="captcha" i],[id*="captcha" i]')),final:controls.some(el=>/submit|send application|submit application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben/i.test((el.innerText||el.value||'').trim()))}; });
@@ -184,7 +188,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   }
   async function drive(session) {
     if(!session||session.running||!session.files||['submitted','ready_for_final_confirmation','closed','failed'].includes(session.status)) return;
-    if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The Google Chrome application window was closed before submission.'); }
+    if(session.page.isClosed()) { clearInterval(session.timer); return set(session,'closed','The Google Chrome application tab was closed before submission.'); }
     session.running=true;
     try {
       await dismissCookieBanner(session.page);
@@ -200,7 +204,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     } catch(error) { clearInterval(session.timer); set(session,'failed',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
   }
   async function attach(jobId,job,applicationPackage,language='de') {
-    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open');
+    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application tab is no longer open');
     const lang=['de','en'].includes(language)?language:'de', cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion);
     const form=profile.applicationForm||{}, applicantName=`${form.firstName||'Candidate'} ${form.lastName||''}`.trim(), startDate=new Date(); startDate.setMonth(startDate.getMonth()+3);
     const notes=applicationNote(job,lang,applicantName,form.startAvailability?.[lang]||'');
@@ -210,19 +214,18 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   }
   async function start(job,applicationPackage=null,language='de') {
     if(!/^https?:\/\//i.test(String(job.url||''))) throw new Error('An exact application URL is required');
-    const activeContext=await browserContext(), blankPages=activeContext.pages().filter(candidate=>candidate.url()==='about:blank'); let page=blankPages[0]; if(!page) page=await activeContext.newPage();
-    for(const extra of blankPages.slice(1)) await extra.close().catch(()=>{});
+    const activeContext=await browserContext(), page=await activeContext.newPage();
     const session={id:randomUUID(),jobId:job.id,page,status:'opening',message:'Opening the exact advert in Google Chrome on HOME-PC…',startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,navigationCount:0,visitedUrls:new Set([job.url]),running:false,files:null,values:{},uploadedFileKinds:new Set(),timer:null};
-    sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The Google Chrome application window was closed before submission.'); });
+    sessions.set(job.id,session); page.on('close',()=>{ clearInterval(session.timer); if(session.status!=='submitted') set(session,'closed','The Google Chrome application tab was closed before submission.'); });
     await page.goto(job.url,{waitUntil:'domcontentloaded',timeout:45000}); await page.bringToFront(); if(applicationPackage) return attach(job.id,job,applicationPackage,language); set(session,'scanning_advert','Exact advert opened in Google Chrome. Reading its complete rendered description and application controls…'); return publicSession(session);
   }
   async function posting(jobId) {
-    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open');
+    const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application tab is no longer open');
     await session.page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight)); await session.page.waitForTimeout(500);
     const result=await session.page.evaluate(()=>({text:(document.body?.innerText||'').replace(/\s+/g,' ').trim(),html:document.documentElement?.outerHTML||'',url:location.href,title:document.title}));
     const emails=result.html.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)?.join(' ')||''; return {...result,text:`${result.text} ${emails}`.trim(),source:'exact posting rendered in Google Chrome',retrievedAt:new Date().toISOString(),complete:result.text.length>=900};
   }
-  async function prepareVisibleForm(jobId) { const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application window is no longer open'); return navigateToApplication(session); }
+  async function prepareVisibleForm(jobId) { const session=sessions.get(jobId); if(!session||session.page.isClosed()) throw new Error('The Google Chrome application tab is no longer open'); return navigateToApplication(session); }
   function fail(jobId,error) { const session=sessions.get(jobId); if(session) { clearInterval(session.timer); return set(session,'failed',`Website application preparation failed: ${error.message}`); } }
   async function confirmSubmit(jobId) {
     const session=sessions.get(jobId); if(!session||session.status!=='ready_for_final_confirmation') throw new Error('The browser agent is not waiting at final submission');
