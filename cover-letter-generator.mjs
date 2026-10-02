@@ -57,6 +57,37 @@ function safeSlug(value, fallback='application') {
   return normal || fallback;
 }
 
+const MAX_DOCUMENT_FILE_NAME_LENGTH = 49;
+const fileNameNoise = new Set(['m','w','d','f','x','im','in','fur','fuer','der','die','das','und','oder']);
+const fileNameAbbreviations = new Map([
+  ['administrator','Admin'],
+  ['administration','Admin'],
+  ['infrastructure','Infra'],
+  ['systemarchitekt','Architect'],
+  ['systemarchitektin','Architect']
+]);
+function informativeTitleSlug(value, maximumLength) {
+  const words = safeSlug(value,'Job').split('-').filter(word => word && !fileNameNoise.has(word.toLowerCase())).map(word => fileNameAbbreviations.get(word.toLowerCase()) || word);
+  let result = '';
+  for (const word of words) {
+    const candidate = result ? `${result}_${word}` : word;
+    if (candidate.length > maximumLength) break;
+    result = candidate;
+  }
+  return (result || words[0]?.slice(0,maximumLength) || 'Job').slice(0,maximumLength).replace(/_+$/,'');
+}
+
+export function compactDocumentFileName(job, versionNumber, documentType='cv', language='de', extension='pdf') {
+  const type = documentType === 'cv' ? 'CV' : 'CL';
+  const lang = String(language).toLowerCase() === 'en' ? 'EN' : 'DE';
+  const version = `v${Math.max(1,Number(versionNumber)||1)}`;
+  const ext = String(extension).toLowerCase() === 'docx' ? 'docx' : 'pdf';
+  const prefix = 'Alex_Hasani_';
+  const suffix = `_${type}_${lang}_${version}.${ext}`;
+  const title = informativeTitleSlug(job?.title,MAX_DOCUMENT_FILE_NAME_LENGTH-prefix.length-suffix.length);
+  return `${prefix}${title}${suffix}`;
+}
+
 function packageKey(job) {
   const digest = createHash('sha256').update(String(job.id || `${job.company}|${job.title}|${job.url}`)).digest('hex').slice(0, 12);
   return `${safeSlug(job.company)}_${safeSlug(job.title)}_${digest}`;
@@ -783,11 +814,6 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
   function packagePath(job) { return join(applicationsRoot, packageKey(job), 'application-package.json'); }
   function current(data) { return data.versions?.find(version => version.versionNumber === data.currentVersion) || data.versions?.at(-1); }
   function versionFolder(job, number) { return join(applicationsRoot, packageKey(job), `v${number}`); }
-  function datedPrefix(job, number) {
-    const date = new Date().toISOString().slice(0,10);
-    return `${date}_${safeSlug(job.company)}_${safeSlug(job.title)}_v${number}`;
-  }
-
   async function writeVersionFiles(data, version) {
     const folder = versionFolder(data.job, version.versionNumber);
     await mkdir(folder, { recursive:true });
@@ -803,15 +829,15 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
 
   function createVersion(job, posting, versionNumber, reason='full') {
     const folder = versionFolder(job, versionNumber);
-    const prefix = datedPrefix(job, versionNumber);
     const resumes = { de:buildResume(job, posting, 'de'), en:buildResume(job, posting, 'en') };
     const letters = { de:draftLetter(job, posting, 'de'), en:draftLetter(job, posting, 'en') };
     const remarks = { de:buildApplicationRemarks(job, posting, 'de'), en:buildApplicationRemarks(job, posting, 'en') };
     for (const language of ['de','en']) {
-      const suffix = language.toUpperCase();
-      resumes[language].document = { fileName:`${prefix}_CV_${suffix}.docx`, path:join(folder, `${prefix}_CV_${suffix}.docx`) };
+      const cvFileName = compactDocumentFileName(job,versionNumber,'cv',language,'docx');
+      const letterFileName = compactDocumentFileName(job,versionNumber,'coverLetter',language,'docx');
+      resumes[language].document = { fileName:cvFileName, path:join(folder,cvFileName) };
       resumes[language].manualEdited = false;
-      letters[language].document = { fileName:`${prefix}_${language === 'de' ? 'Anschreiben_DE' : 'Cover_Letter_EN'}.docx`, path:join(folder, `${prefix}_${language === 'de' ? 'Anschreiben_DE' : 'Cover_Letter_EN'}.docx`) };
+      letters[language].document = { fileName:letterFileName, path:join(folder,letterFileName) };
       letters[language].manualEdited = false;
     }
     return {
@@ -917,10 +943,11 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     restored.reason = 'restore';
     restored.restoredFrom = source.versionNumber;
     const folder = versionFolder(job,nextNumber);
-    const prefix = datedPrefix(job,nextNumber);
     for (const language of ['de','en']) {
-      restored.documents.cv[language].document = { fileName:`${prefix}_CV_${language.toUpperCase()}.docx`, path:join(folder,`${prefix}_CV_${language.toUpperCase()}.docx`) };
-      restored.documents.coverLetter[language].document = { fileName:`${prefix}_${language === 'de' ? 'Anschreiben_DE' : 'Cover_Letter_EN'}.docx`, path:join(folder,`${prefix}_${language === 'de' ? 'Anschreiben_DE' : 'Cover_Letter_EN'}.docx`) };
+      const cvFileName = compactDocumentFileName(job,nextNumber,'cv',language,'docx');
+      const letterFileName = compactDocumentFileName(job,nextNumber,'coverLetter',language,'docx');
+      restored.documents.cv[language].document = { fileName:cvFileName, path:join(folder,cvFileName) };
+      restored.documents.coverLetter[language].document = { fileName:letterFileName, path:join(folder,letterFileName) };
     }
     data.versions.push(restored);
     data.currentVersion = nextNumber;
@@ -941,7 +968,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     const document = version?.documents?.[selectedType]?.[selectedLanguage];
     if (!document) throw new Error('The selected document is unavailable');
     if (String(format).toLowerCase() === 'pdf') {
-      const fileName = basename(document.document.path).replace(/\.docx$/i,'.pdf');
+      const fileName = compactDocumentFileName(data.job || job,version.versionNumber,selectedType,selectedLanguage,'pdf');
       const outputPath = join(versionFolder(job,version.versionNumber),fileName);
       let cached = false;
       if (existsSync(outputPath)) {
@@ -959,12 +986,12 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
       }
       return { path:outputPath,fileName,contentType:'application/pdf' };
     }
-    return { path:document.document.path,fileName:basename(document.document.path),contentType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    return { path:document.document.path,fileName:compactDocumentFileName(data.job || job,version.versionNumber,selectedType,selectedLanguage,'docx'),contentType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
   }
 
-  function publicDocument(jobId,version,documentType,language,document) {
-    const base = `/api/application-package/download?id=${encodeURIComponent(jobId)}&language=${language}&type=${documentType}&version=${version.versionNumber}`;
-    return { ...document, document:{ fileName:document.document.fileName, downloadUrl:base, pdfDownloadUrl:`${base}&format=pdf` } };
+  function publicDocument(job,version,documentType,language,document) {
+    const base = `/api/application-package/download?id=${encodeURIComponent(job.id)}&language=${language}&type=${documentType}&version=${version.versionNumber}`;
+    return { ...document, document:{ fileName:compactDocumentFileName(job,version.versionNumber,documentType,language,'docx'), downloadUrl:base, pdfDownloadUrl:`${base}&format=pdf` } };
   }
 
   function publicPackage(data) {
@@ -973,7 +1000,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     const trustedFullSource = /^(exact LinkedIn guest posting|exact posting structured JD|exact posting main JD content|exact posting page content|exact posting rendered in local browser|exact posting via public text reader|exact posting via federal job database|exact posting discovered via Google|user-pasted full job description|stored full tracker JD snapshot)$/.test(data.posting.source);
     const jdComplete = trustedFullSource && isCompleteJobDescription(data.posting.text,data.posting.source === 'user-pasted full job description' ? MIN_PASTED_JD_LENGTH : MIN_RETRIEVED_JD_LENGTH);
     const documents = {
-      ...Object.fromEntries(['cv','coverLetter'].map(type => [type,Object.fromEntries(['de','en'].map(language => [language,publicDocument(data.job.id,active,type,language,active.documents[type][language])]))])),
+      ...Object.fromEntries(['cv','coverLetter'].map(type => [type,Object.fromEntries(['de','en'].map(language => [language,publicDocument(data.job,active,type,language,active.documents[type][language])]))])),
       remarks:Object.fromEntries(['de','en'].map(language => [language,{ ...active.documents.remarks[language] }]))
     };
     const variants = Object.fromEntries(['de','en'].map(language => [language,{ letter:documents.coverLetter[language], document:documents.coverLetter[language].document }]));

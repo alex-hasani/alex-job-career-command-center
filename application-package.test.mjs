@@ -1,12 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildApplicationRemarks, buildResume } from './cover-letter-generator.mjs';
+import { buildApplicationRemarks, buildResume, compactDocumentFileName } from './cover-letter-generator.mjs';
 
 const job = { company:'Test Employer', title:'Senior Hybrid Infrastructure Engineer', location:'Stuttgart' };
 const posting = {
   text:'Responsibilities include Windows Server, Active Directory, VMware vSphere, Azure hybrid infrastructure, Linux operations, Ansible automation, incident management, backup and recovery. Requirements include enterprise infrastructure experience, English communication, Terraform and Kubernetes as desirable skills.'
 };
+
+test('application document names stay informative and below portal limits', () => {
+  const longJob = { title:'IT System-Administrator (m/w/d) Fieldservice Im Großraum Stuttgart' };
+  const names = [
+    compactDocumentFileName(longJob,12,'cv','de','pdf'),
+    compactDocumentFileName(longJob,12,'coverLetter','de','pdf'),
+    compactDocumentFileName(longJob,12,'cv','en','docx')
+  ];
+  assert.deepEqual(names,[
+    'Alex_Hasani_IT_System_Admin_CV_DE_v12.pdf',
+    'Alex_Hasani_IT_System_Admin_CL_DE_v12.pdf',
+    'Alex_Hasani_IT_System_Admin_CV_EN_v12.docx'
+  ]);
+  assert.ok(names.every(name => name.length < 50));
+});
 
 test('job-specific CV uses one evidence map in German and English', () => {
   const de = buildResume(job,posting,'de');
