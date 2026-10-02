@@ -101,7 +101,24 @@ try {
   $published = Join-Path $destinationRoot $name
   Move-Item -LiteralPath $publishedPartial -Destination $published
   $publishedPartial = $null
-  [ordered]@{ok=$true; archive=$published; bytes=(Get-Item -LiteralPath $published).Length; entries=$entryCount; sha256=$hash; completedAt=[DateTimeOffset]::Now.ToString('o')} | ConvertTo-Json
+  $completed = [DateTimeOffset]::Now
+  $retentionCutoff = $completed.AddDays(-7)
+  $removedArchives = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($candidate in Get-ChildItem -LiteralPath $destinationRoot -File -Filter 'Job-Search_*.zip') {
+    if ($candidate.FullName -eq $published) { continue }
+    if ($candidate.Name -notmatch '^Job-Search_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_[+-]\d{4})_[0-9a-fA-F]{8}\.zip$') { continue }
+    $stamp = $Matches[1]
+    $normalizedStamp = $stamp.Substring(0,23) + ':' + $stamp.Substring(23,2)
+    $archiveTime = [DateTimeOffset]::ParseExact($normalizedStamp, 'yyyy-MM-dd_HH-mm-ss_zzz', [Globalization.CultureInfo]::InvariantCulture)
+    if ($archiveTime -lt $retentionCutoff) {
+      Remove-Item -LiteralPath $candidate.FullName -Force
+      $removedArchives.Add($candidate.Name)
+    }
+  }
+  [ordered]@{
+    ok=$true; archive=$published; bytes=(Get-Item -LiteralPath $published).Length; entries=$entryCount; sha256=$hash
+    completedAt=$completed.ToString('o'); retentionDays=7; retentionCutoff=$retentionCutoff.ToString('o'); removedArchives=@($removedArchives)
+  } | ConvertTo-Json
 } finally {
   if ($publishedPartial -and (Test-Path -LiteralPath $publishedPartial)) { Remove-Item -LiteralPath $publishedPartial }
   # Only this invocation's validated, newly created temporary directory is removed.
