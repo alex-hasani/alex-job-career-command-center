@@ -66,6 +66,27 @@ const fileNameAbbreviations = new Map([
   ['systemarchitekt','Architect'],
   ['systemarchitektin','Architect']
 ]);
+function cleanDocumentTitle(value) {
+  let slug = safeSlug(value,'');
+  const agePrefix = /^(?:(?:posted|published|updated)-)?(?:about-)?\d+-(?:minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks|month|months)-ago-?/i;
+  const compactAgePrefix = /^\d+(?:m|h|d|w|mo)-/i;
+  const germanAgePrefix = /^vor-(?:etwa-)?\d+-(?:minuten|minute|stunden|stunde|tagen|tage|tag|wochen|woche|monaten|monat)-?/i;
+  const statusPrefix = /^(?:today|yesterday|heute|gestern|new|neu|promoted|gesponsert)-?/i;
+  let previous;
+  do {
+    previous = slug;
+    slug = slug.replace(agePrefix,'').replace(compactAgePrefix,'').replace(germanAgePrefix,'').replace(statusPrefix,'').replace(/^-+|-+$/g,'');
+  } while (slug !== previous);
+  return slug;
+}
+function documentTitle(job={}) {
+  const primary = cleanDocumentTitle(job.title);
+  if (primary.split('-').filter(Boolean).length >= 2) return primary;
+  const candidates = [job.positionTitle,job.originalTitle,job.roleTitle,job.position,job.role,job.name]
+    .map(cleanDocumentTitle)
+    .filter(Boolean);
+  return candidates.sort((left,right) => right.split('-').length-left.split('-').length)[0] || primary || 'Technical-Role';
+}
 function informativeTitleSlug(value, maximumLength) {
   const words = safeSlug(value,'Job').split('-').filter(word => word && !fileNameNoise.has(word.toLowerCase())).map(word => fileNameAbbreviations.get(word.toLowerCase()) || word);
   let result = '';
@@ -84,7 +105,7 @@ export function compactDocumentFileName(job, versionNumber, documentType='cv', l
   const ext = String(extension).toLowerCase() === 'docx' ? 'docx' : 'pdf';
   const prefix = 'Alex_Hasani_';
   const suffix = `_${type}_${lang}_${version}.${ext}`;
-  const title = informativeTitleSlug(job?.title,MAX_DOCUMENT_FILE_NAME_LENGTH-prefix.length-suffix.length);
+  const title = informativeTitleSlug(documentTitle(job),MAX_DOCUMENT_FILE_NAME_LENGTH-prefix.length-suffix.length);
   return `${prefix}${title}${suffix}`;
 }
 

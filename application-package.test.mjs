@@ -23,6 +23,24 @@ test('application document names stay informative and below portal limits', () =
   assert.ok(names.every(name => name.length < 50));
 });
 
+test('application document names remove posting-age metadata and keep the actual position', () => {
+  const noisyJobs = [
+    { title:'1 day ago IT System-Administrator (m/w/d) Fieldservice Im Großraum Stuttgart' },
+    { title:'Vor 2 Tagen Senior Cloud Platform Engineer' },
+    { title:'Neu DevOps Engineer' },
+    { title:'1 day ago IT', positionTitle:'IT System Engineer Infrastructure' }
+  ];
+  const names = noisyJobs.map(job => compactDocumentFileName(job,1,'cv','de','pdf'));
+  assert.deepEqual(names,[
+    'Alex_Hasani_IT_System_Admin_CV_DE_v1.pdf',
+    'Alex_Hasani_Senior_Cloud_Platform_CV_DE_v1.pdf',
+    'Alex_Hasani_DevOps_Engineer_CV_DE_v1.pdf',
+    'Alex_Hasani_IT_System_Engineer_Infra_CV_DE_v1.pdf'
+  ]);
+  assert.ok(names.every(name => name.length < 50));
+  assert.ok(names.every(name => !/day|ago|tagen|neu/i.test(name)));
+});
+
 test('job-specific CV uses one evidence map in German and English', () => {
   const de = buildResume(job,posting,'de');
   const en = buildResume(job,posting,'en');
