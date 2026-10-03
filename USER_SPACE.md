@@ -1,6 +1,6 @@
 # User space
 
-The additive user-space layer is available at `/user-space`. The existing Alex Job dashboard, application database, browser helper, Gmail workflow, and application procedures remain on their original routes and are not made multi-tenant by this release.
+The account page is the first landing page at `/` and remains directly available at `/user-space`. After sign-in, **Open career dashboard** loads the existing app at `/dashboard`. Signed-out requests to `/dashboard` and `/index.html` return to the account landing page. The application database, browser helper, Gmail workflow, and application procedures remain unchanged and are not made multi-tenant by this release.
 
 ## Security boundary
 

@@ -51,9 +51,9 @@ npm install
 npm start
 ```
 
-Open `http://localhost:8787`. The server binds to `127.0.0.1` unless `HOST` is explicitly set. Runtime state is created under `runtime/`, which is ignored by Git. To store runtime files elsewhere, set `ALEX_JOB_DATA_DIR` to an absolute local directory.
+Open `http://localhost:8787` for the account landing page. After sign-in, **Open career dashboard** loads the existing app at `/dashboard`. The server binds to `127.0.0.1` unless `HOST` is explicitly set. Runtime state is created under `runtime/`, which is ignored by Git. To store runtime files elsewhere, set `ALEX_JOB_DATA_DIR` to an absolute local directory.
 
-Open `http://localhost:8787/user-space` for the additive account and resume workspace. Security and evidence boundaries are documented in `USER_SPACE.md`; the original dashboard routes remain unchanged.
+The additive account and resume workspace also remains directly available at `/user-space`. Security and evidence boundaries are documented in `USER_SPACE.md`; existing dashboard procedures remain unchanged.
 
 Spreadsheet import/export uses `@oai/artifact-tool` when running inside its supported workspace runtime. The dashboard, SQLite workflow, search, scoring, and document engine remain inspectable independently.
 

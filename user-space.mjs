@@ -272,8 +272,11 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
   const attempts = new Map();
   const dummyPasswordHash = hashPassword('constant-time-placeholder-password-2026');
   const staticFiles = new Map([
+    ['/', ['user-space.html', 'text/html; charset=utf-8']],
     ['/user-space', ['user-space.html', 'text/html; charset=utf-8']],
     ['/user-space/', ['user-space.html', 'text/html; charset=utf-8']],
+    ['/dashboard', ['index.html', 'text/html; charset=utf-8']],
+    ['/index.html', ['index.html', 'text/html; charset=utf-8']],
     ['/user-space.js', ['user-space.js', 'text/javascript; charset=utf-8']],
     ['/user-space.css', ['user-space.css', 'text/css; charset=utf-8']],
   ]);
@@ -412,6 +415,11 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
   async function handle(req, res, url) {
     const staticEntry = staticFiles.get(url.pathname);
     if (staticEntry && req.method === 'GET') {
+      if ((url.pathname === '/dashboard' || url.pathname === '/index.html') && !rawSession(req)) {
+        res.writeHead(302, securityHeaders({ location:'/' }));
+        res.end();
+        return true;
+      }
       const [name, contentType] = staticEntry;
       const content = await readFile(join(root, name));
       res.writeHead(200, securityHeaders({ 'content-type':contentType }));
