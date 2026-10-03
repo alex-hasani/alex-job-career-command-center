@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, refineResumeEvidence } from './user-space.mjs';
+import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, refineResumeEvidence } from './user-space.mjs';
 
 test('passwords use salted scrypt hashes and verify without storing plaintext', async () => {
   const password = 'Correct horse battery staple 2026';
@@ -21,11 +21,36 @@ test('user-space database separates credentials, sessions, documents, and drafts
   const db = openUserSpaceDatabase(join(directory, 'users.sqlite'));
   try {
     const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
-    for (const name of ['users','sessions','documents','resume_drafts','security_events']) assert.equal(tables.has(name), true);
+    for (const name of ['users','sessions','documents','resume_drafts','application_profiles','browser_extensions','security_events','user_space_settings']) assert.equal(tables.has(name), true);
     const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map(row => row.name));
     assert.equal(userColumns.has('password'), false);
     assert.equal(userColumns.has('password_hash'), true);
+    assert.equal(userColumns.has('role'), true);
   } finally { db.close(); await rm(directory, { recursive:true, force:true }); }
+});
+
+test('Alex is promoted to protected global admin and rollout revokes existing sessions', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'alex-job-global-admin-')),path=join(directory,'users.sqlite');
+  let db=openUserSpaceDatabase(path);
+  const createdAt='2026-10-03T00:00:00.000Z';
+  db.prepare('INSERT INTO users(id,username,display_name,role,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run('alex-id','alex','Alex','user','test-hash',createdAt,createdAt);
+  db.prepare('INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)').run('token-hash','alex-id','csrf',createdAt,'2099-01-01T00:00:00.000Z',createdAt);
+  db.prepare("DELETE FROM user_space_settings WHERE key='global_admin_rollout_2026_10_03'").run();
+  db.close();
+  db=openUserSpaceDatabase(path);
+  try {
+    assert.equal(db.prepare("SELECT role FROM users WHERE username='alex'").get().role,'global_admin');
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM sessions').get().count,0);
+  } finally {db.close();await rm(directory,{recursive:true,force:true});}
+});
+
+test('personal Chrome helper exports are valid distinct ZIP bundles', () => {
+  const first=buildStoredZip([{name:'manifest.json',data:'{"name":"First"}'},{name:'profile-config.js',data:'export const helperConfig={publicId:"one"};'}]);
+  const second=buildStoredZip([{name:'manifest.json',data:'{"name":"Second"}'},{name:'profile-config.js',data:'export const helperConfig={publicId:"two"};'}]);
+  assert.equal(first.readUInt32LE(0),0x04034b50);
+  assert.equal(first.readUInt32LE(first.length-22),0x06054b50);
+  assert.notDeepEqual(first,second);
+  assert.match(first.toString('utf8'),/profile-config\.js/);
 });
 
 test('ATS refinement prioritizes only source evidence and keeps missing terms review-only', () => {
@@ -45,6 +70,13 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /Turn your real experience into interview-ready applications\./);
   assert.match(html, /using only your verified skills, experience, and achievements\./);
   assert.match(html, /href="\/dashboard"/);
+  assert.match(html, /Global administration/);
+});
+
+test('open dashboard pages continuously verify the login session', async () => {
+  const html=await readFile(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(html,/api\/user-space\/session/);
+  assert.match(html,/location\.replace\('\/'\)/);
 });
 
 test('root is the account landing page and the dashboard redirects signed-out visitors', async () => {

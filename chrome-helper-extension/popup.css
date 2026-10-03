@@ -1,0 +1,9 @@
+:root { color-scheme:light dark; font:14px/1.4 system-ui,sans-serif; }
+body { margin:0; min-width:330px; background:#0d1a2b; color:#f5f7fb; }
+main { padding:18px; }
+h1 { margin:0 0 8px; font-size:19px; }
+p { margin:0 0 16px; color:#c4ccda; }
+button { width:100%; border:0; border-radius:9px; padding:12px 14px; background:#55d7c2; color:#09201c; font-weight:750; cursor:pointer; }
+button:disabled { opacity:.55; cursor:wait; }
+#status { margin-top:13px; min-height:40px; color:#dce4ef; }
+#status.error { color:#ffb4b4; }

@@ -1607,6 +1607,9 @@
       }
       async function checkAppVersion() {
         try {
+          const sessionResponse=await fetch('/api/user-space/session',{cache:'no-store',credentials:'same-origin'});
+          const session=await sessionResponse.json().catch(()=>({authenticated:false}));
+          if(!session.authenticated){location.replace('/');return;}
           const current = await readAppVersion();
           if (!appVersion) appVersion = current;
           else if (current && current !== appVersion) await forceAppReload(current);

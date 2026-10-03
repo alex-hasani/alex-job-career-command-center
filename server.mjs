@@ -10,6 +10,8 @@ import { openJobDatabase } from './job-database.mjs';
 import { createCoverLetterService } from './cover-letter-generator.mjs';
 import { createFastApplyService } from './fast-apply-service.mjs';
 import { createWebsiteApplyAgent } from './website-apply-agent.mjs';
+import { createChromeHelperClient } from './chrome-helper-client.mjs';
+import { chromeHelperStatus, takeChromeHelperCommand, completeChromeHelperCommand, sendChromeHelperCommand } from './chrome-helper-bridge.mjs';
 import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
@@ -53,6 +55,15 @@ const FAST_APPLY_DAILY_LIMIT = 10;
 const TERMINAL_APPLICATION_STATUSES = new Set(['Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed']);
 const fastApply = createFastApplyService({ root, workspace, coverLetters, senderEmail:canonicalResumeProfile.identity.email, senderName:canonicalResumeProfile.identity.name, bccEmail:FAST_APPLY_BCC });
 const websiteApply = createWebsiteApplyAgent({ workspace, coverLetters, profile:canonicalResumeProfile, onEvent:logActivity });
+const personalisedWebsiteAgents=new Map();
+function browserHelperContext(req) {
+  const account=userSpace.extensionContext(req);
+  const channel=account?`extension:${account.publicId}`:'default';
+  if(!account) return {channel,account:null,agent:websiteApply};
+  let agent=personalisedWebsiteAgents.get(account.publicId);
+  if(!agent){agent=createWebsiteApplyAgent({workspace,coverLetters:null,profile:account.profile,chromeClient:createChromeHelperClient(channel),onEvent:logActivity});personalisedWebsiteAgents.set(account.publicId,agent);}
+  return {channel,account,agent};
+}
 const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
 const fastApplyErrorKey = jobId => `fast_apply_error:${jobId}`;
 function readFastApplyDelivery(jobId) {
@@ -1408,6 +1419,50 @@ function validatedApplicationUrl(value) {
   if(host==='localhost'||host==='127.0.0.1'||host==='::1'||/^10\.|^192\.168\.|^169\.254\.|^172\.(?:1[6-9]|2\d|3[01])\./.test(host)) throw new Error('The application link must be a public job website');
   return parsed.href;
 }
+function sameWebPage(left,right) {
+  try {
+    const a=new URL(left),b=new URL(right);
+    a.hash='';b.hash='';
+    return a.href.replace(/\/$/,'')===b.href.replace(/\/$/,'');
+  } catch { return false; }
+}
+async function retryCurrentBrowserPage(input,{agent=websiteApply,account=null}={}) {
+  const tabId=Number(input.tabId),url=validatedApplicationUrl(input.url);
+  if(!Number.isInteger(tabId)||tabId<0) throw new Error('The active Chrome tab could not be identified');
+  const existing=await agent.retryPage(tabId);
+  if(existing) return existing;
+  const requestedJobId=String(input.jobId||'').trim();
+  const bound=requestedJobId?jobDb.getJob(requestedJobId):null;
+  const job=bound&&sameWebPage(bound.url,url)?bound:{
+    id:`adhoc-${randomUUID()}`,
+    title:String(input.title||'Ad-hoc website application').trim(),
+    company:String(input.company||new URL(url).hostname).trim(),
+    location:'',url,applicationStatus:'Preparing'
+  };
+  const session=await agent.startOnPage(job,tabId,null,input.language||'de');
+  void (async()=>{
+    try {
+      const posting=await agent.posting(job.id);
+      await agent.prepareVisibleForm(job.id);
+      const preparedJob={...job,title:job.title||posting.title||'Ad-hoc website application',description:posting.text,jdSnapshot:posting.text,jdFetched:true,jdSource:posting.source,jdRetrievedAt:posting.retrievedAt,lastVerifiedAt:posting.retrievedAt};
+      if(account){
+        if(!account.resume||account.resume.mime_type!=='application/pdf') throw new Error('This account needs a PDF resume before the personalised helper can upload files');
+        await agent.attachFiles(job.id,preparedJob,{cv:account.resume.stored_path},input.language||'de');
+        return;
+      }
+      let applicationPackage=await coverLetters.readPackage(preparedJob);
+      if(!applicationPackage?.quality?.applicationReady) {
+        applicationPackage=await coverLetters.prepare(preparedJob,'',{scope:'full',posting:{...posting,source:'exact posting rendered in local browser'}});
+        if(bound) jobDb.upsertApplicationPackage(bound.id,applicationPackage);
+      }
+      await agent.attach(job.id,preparedJob,applicationPackage,input.language||'de');
+    } catch(error) {
+      agent.fail(job.id,error);
+      logActivity({action:'website_apply.extension_retry',result:'error',jobId:job.id,detail:error.message});
+    }
+  })();
+  return session;
+}
 async function updateApplicationLink(id,value) {
   const url=validatedApplicationUrl(value), state=await getCareerState();
   await migrateDatabaseIfNeeded();
@@ -1492,9 +1547,45 @@ function requireCurrentClientVersion(req, url) {
 }
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const auditable = url.pathname.startsWith('/api/') && req.method !== 'GET';
+  const auditable = url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/browser-helper/') && req.method !== 'GET';
   if (auditable) res.once('finish', () => logActivity({ action:req.method + ' ' + url.pathname, result:res.statusCode < 400 ? 'completed' : 'failed', detail:'HTTP ' + res.statusCode }));
   try {
+    if (url.pathname.startsWith('/api/browser-helper/')) {
+      const remote=String(req.socket.remoteAddress||'').replace(/^::ffff:/,'');
+      if(!['127.0.0.1','::1'].includes(remote)) throw new Error('Chrome helper access is local-only');
+      const helper=browserHelperContext(req);
+      if(url.pathname==='/api/browser-helper/status'&&req.method==='GET') {
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify({ok:true,...chromeHelperStatus(helper.channel),profile:helper.account?.user||null}));
+      }
+      if(url.pathname==='/api/browser-helper/ping'&&req.method==='GET') {
+        const result=await sendChromeHelperCommand('ping',{},5000,helper.channel);
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify({ok:Boolean(result?.ok),version:result?.version||'',...chromeHelperStatus(helper.channel)}));
+      }
+      if(url.pathname==='/api/browser-helper/next'&&req.method==='GET') {
+        const command=await takeChromeHelperCommand(20000,helper.channel);
+        if(!command){res.writeHead(204,{'cache-control':'no-store'});return res.end();}
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify(command));
+      }
+      if(url.pathname==='/api/browser-helper/result'&&req.method==='POST') {
+        const input=await jsonBody(req),accepted=completeChromeHelperCommand(input,helper.channel);
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify({ok:true,accepted}));
+      }
+      if(url.pathname==='/api/browser-helper/retry-current'&&req.method==='POST') {
+        const session=await retryCurrentBrowserPage(await jsonBody(req),helper);
+        res.writeHead(202,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify({ok:true,session}));
+      }
+      if(url.pathname==='/api/browser-helper/retry-status'&&req.method==='GET') {
+        const session=helper.agent.status(url.searchParams.get('id'));
+        res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+        return res.end(JSON.stringify({ok:true,session}));
+      }
+      throw new Error('Unsupported Chrome helper request');
+    }
     if (await userSpace.handle(req, res, url)) return;
     requireCurrentClientVersion(req, url);
     if (url.pathname === '/api/app-version') {

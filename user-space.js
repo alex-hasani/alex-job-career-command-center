@@ -25,12 +25,17 @@ function setAuthenticated(data) {
   $('#workspacePanel').classList.remove('hidden');
   $('#accountName').textContent = `${data.user.displayName} · ${data.user.username}`;
   renderResume(data.resume || null);
+  renderApplicationProfile(data.applicationProfile || {});
+  const isAdmin=data.user.role==='global_admin';
+  $('#adminPanel').classList.toggle('hidden',!isAdmin);
+  if(isAdmin) void loadAdminUsers();
 }
 
 function setSignedOut() {
   csrfToken = '';
   $('#workspacePanel').classList.add('hidden');
   $('#authPanel').classList.remove('hidden');
+  $('#adminPanel').classList.add('hidden');
 }
 
 function renderResume(document) {
@@ -42,6 +47,29 @@ function renderResume(document) {
   }
   status.textContent = `${document.originalName} · ${Math.round(document.byteSize / 1024)} KB · ${document.extractedCharacters} extracted characters`;
   status.className = 'status ready';
+}
+
+function renderApplicationProfile(profile) {
+  const form=$('#applicationProfileForm');
+  for(const element of form.elements) if(element.name) element.value=profile[element.name]||'';
+}
+
+async function loadAdminUsers() {
+  const data=await api('/api/user-space/admin/users');
+  $('#adminUsers').replaceChildren(...data.users.map(user=>{
+    const row=document.createElement('article');row.className='admin-user';
+    const summary=document.createElement('div');summary.innerHTML=`<strong></strong><span></span>`;summary.querySelector('strong').textContent=`${user.displayName} · ${user.username}`;summary.querySelector('span').textContent=`${user.role} · ${user.disabledAt?'disabled':'active'} · ${user.activeSessions} session(s) · ${user.documentCount} document(s)`;
+    const actions=document.createElement('div');actions.className='account-actions';
+    const choices=user.protectedGlobalAdmin?['revoke_sessions']:user.disabledAt?['enable','make_admin','make_user','revoke_sessions']:['disable','make_admin','make_user','revoke_sessions'];
+    const labels={disable:'Disable',enable:'Enable',make_admin:'Make admin',make_user:'Make user',revoke_sessions:'Sign out everywhere'};
+    for(const action of choices){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=labels[action];button.onclick=()=>manageUser(user.id,action);actions.append(button);}
+    row.append(summary,actions);return row;
+  }));
+}
+
+async function manageUser(userId,action) {
+  try { await api('/api/user-space/admin/users',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({userId,action})});await loadAdminUsers();showMessage('User access updated.'); }
+  catch(error){showMessage(error.message,true);}
 }
 
 async function authenticate(form, endpoint) {
@@ -101,5 +129,34 @@ $('#tailorButton').addEventListener('click', () => {
   if (!value) return showMessage('Paste the exact job description first.', true);
   createDraft(value);
 });
+$('#saveProfileButton').addEventListener('click',async()=>{
+  const button=$('#saveProfileButton');button.disabled=true;
+  try { const body=Object.fromEntries(new FormData($('#applicationProfileForm')).entries()); await api('/api/user-space/application-profile',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); showMessage('Application profile saved for this account.'); }
+  catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
+});
+$('#exportExtensionButton').addEventListener('click',async()=>{
+  const button=$('#exportExtensionButton');button.disabled=true;
+  try {
+    const response=await fetch('/api/user-space/chrome-extension',{method:'POST',headers:{'x-csrf-token':csrfToken},credentials:'same-origin'});
+    if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||'Extension export failed.');}
+    const blob=await response.blob(),disposition=response.headers.get('content-disposition')||'',match=disposition.match(/filename="([^"]+)"/i),name=match?.[1]||'alex-job-helper.zip';
+    const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    showMessage('Personal Chrome helper exported. Extract the ZIP, then load that folder unpacked in Chrome.');
+  } catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
+});
+$('#refreshUsersButton').addEventListener('click',()=>loadAdminUsers().catch(error=>showMessage(error.message,true)));
 
-api('/api/user-space/session').then(data => data.authenticated ? setAuthenticated(data) : setSignedOut()).catch(() => setSignedOut());
+async function verifySession({initial=false}={}) {
+  try {
+    const data=await api('/api/user-space/session');
+    if(data.authenticated){if(initial)setAuthenticated(data);return true;}
+  } catch {}
+  setSignedOut();
+  if(!initial&&location.pathname!=='/') location.replace('/');
+  return false;
+}
+void verifySession({initial:true});
+setInterval(()=>void verifySession(),5000);
+window.addEventListener('focus',()=>void verifySession());
+window.addEventListener('pageshow',()=>void verifySession());
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')) navigator.serviceWorker.register('/service-worker.js').then(registration=>registration.update()).catch(()=>{});

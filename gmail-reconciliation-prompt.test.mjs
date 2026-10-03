@@ -6,14 +6,15 @@ test('builds a bounded checkpoint-aware Gmail reconciliation prompt', () => {
   const metadata = { value:JSON.stringify({ at:'2026-10-03T10:00:00.000Z' }) };
   const prompt = buildGmailReconciliationPrompt({
     days:7,
-    primaryAccount:'configured primary account',
-    forwardedAccount:'configured forwarding account',
+    primaryAccount:'primary@example.com',
+    forwardedAccount:'jobs@example.com',
     checkpointMetadata:metadata
   });
 
-  assert.match(prompt, /exactly one metadata-only Gmail search/i);
-  assert.match(prompt, /limit 100 and do not paginate/i);
-  assert.match(prompt, /Batch-read exact content once/i);
+  assert.match(prompt, /one logical metadata-only search/i);
+  assert.match(prompt, /at most 5 pages/i);
+  assert.match(prompt, /CHECKPOINT_AT/i);
+  assert.match(prompt, /Batch-read plausible candidates once/i);
   assert.match(prompt, /maximum 20/i);
   assert.match(prompt, /one incremental SQLite\/Career Command Center reconciliation and one Excel sync/i);
   assert.match(prompt, /browse only unknown beneficial domains/i);
@@ -26,8 +27,8 @@ test('builds a bounded checkpoint-aware Gmail reconciliation prompt', () => {
 test('falls back to the requested window without a checkpoint', () => {
   const prompt = buildGmailReconciliationPrompt({
     days:7,
-    primaryAccount:'configured primary account',
-    forwardedAccount:'configured forwarding account'
+    primaryAccount:'primary@example.com',
+    forwardedAccount:'jobs@example.com'
   });
   assert.match(prompt, /No checkpoint exists; use the last 7 days/i);
   assert.equal(gmailReconciliationCheckpoint(null), null);

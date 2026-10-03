@@ -1,4 +1,4 @@
-const CACHE = "alex-job-shell-v31";
+const CACHE = "alex-job-shell-v32-force-login";
 const SHELL = ["/", "/index.html", "/filter-logic.js", "/manifest.webmanifest", "/app-icon.svg"];
 
 self.addEventListener("install", event => {
@@ -7,8 +7,12 @@ self.addEventListener("install", event => {
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))));
-  self.clients.claim();
+  event.waitUntil((async()=>{
+    await caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))));
+    await self.clients.claim();
+    const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
+    await Promise.all(windows.map(client=>client.navigate("/")));
+  })());
 });
 
 self.addEventListener("fetch", event => {

@@ -20,13 +20,13 @@ export function buildGmailReconciliationPrompt({
     : `No checkpoint exists; use the last ${days} days.`;
 
   return [
-    `Run the token-efficient Gmail lifecycle reconciliation for ${primaryAccount}, including forwarded or attached messages from ${forwardedAccount}.`,
+    `Reconcile Gmail lifecycle mail for ${primaryAccount}, including forwarded or attached mail from ${forwardedAccount}.`,
     startRule,
-    `Make exactly one metadata-only Gmail search using focused application lifecycle terms, after: with the calendar date one day before the start, excluding spam, trash and promotions; limit 100 and do not paginate. If capped, stop without advancing the checkpoint.`,
-    `Discard outbound applications already recorded, alerts, newsletters, security/login mail, delivery failures, out-of-office replies and unrelated mail from metadata. Batch-read exact content once for only new plausible lifecycle candidates, maximum 20; include required forwarded or attached content.`,
-    `Record only explicit confirmations, interview events, rejections, offers, withdrawals, cancellations or closures. Deduplicate by Gmail message ID plus original timestamp plus status, preserve that timestamp, append only new evidence, then run one incremental SQLite/Career Command Center reconciliation and one Excel sync.`,
-    `For every batch-read message, inspect useful job-board, recruiter and employer-career domains. Compare against all active registries first; browse only unknown beneficial domains, verify the official reachable jobs URL, and add only canonical non-ATS sources to the local discovered-source file. Ignore tracking, login, unsubscribe, delivery, shared ATS, duplicates and unavailable domains.`,
-    `If nothing changed, only record the reviewed count and checkpoint. Never send email or apply. Return compact counts and confirmed changes only.`
+    `Use one logical metadata-only search with focused lifecycle terms and after: set to one calendar day before the start; exclude spam, trash and promotions. Fetch 100 per page, follow at most 5 pages, deduplicate IDs, and open no bodies while paging.`,
+    `From metadata discard recorded outbound mail, alerts, newsletters, login/security mail, delivery failures, out-of-office replies and unrelated mail. Batch-read plausible candidates once, maximum 20, including needed forwarded or attached content.`,
+    `Record only explicit confirmations, interviews, rejections, offers, withdrawals, cancellations or closures. Deduplicate by message ID, original timestamp and status; preserve timestamps; append only new evidence; run one incremental SQLite/Career Command Center reconciliation and one Excel sync.`,
+    `For read messages, compare useful domains with active registries; browse only unknown beneficial domains and add only verified reachable canonical non-ATS sources. Ignore tracking, login, unsubscribe, delivery, shared ATS, duplicates and unavailable domains.`,
+    `Sort newer mail oldest first. Above 20 candidates, process the oldest complete slice and advance via CHECKPOINT_AT only through the newest fully reviewed timestamp; leave later mail for the next run. Otherwise advance to run time. Never send email or apply. Return compact changes only.`
   ].join(' ');
 }
 

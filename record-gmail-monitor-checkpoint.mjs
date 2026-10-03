@@ -29,10 +29,15 @@ const countArgument = markerWrite ? process.argv[4] : (explicitWrite ? process.a
 const changeArgument = markerWrite ? process.argv[5] : (explicitWrite ? process.argv[5] : process.argv[4]);
 const reviewedMessages = Number(countArgument || 0);
 const genuineChanges = Number(changeArgument ?? countArgument ?? 0);
+const markerIndex = markerWrite ? 6 : (explicitWrite ? 5 : 5);
+const boundaryArgument = process.argv[markerIndex] === 'CHECKPOINT_AT' ? process.argv[markerIndex + 1] : '';
+const boundaryDate = boundaryArgument ? new Date(boundaryArgument) : new Date();
+if (Number.isNaN(boundaryDate.getTime())) throw new Error('CHECKPOINT_AT must be a valid ISO timestamp');
+if (boundaryDate.getTime() > Date.now() + 60_000) throw new Error('CHECKPOINT_AT cannot be in the future');
 const db = openJobDatabase(databasePath);
 
 const checkpoint = {
-  at: new Date().toISOString(),
+  at: boundaryDate.toISOString(),
   evidenceCount: genuineChanges,
   source: 'Gmail status monitor',
   reviewedMessages,

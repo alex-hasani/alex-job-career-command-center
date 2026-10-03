@@ -18,6 +18,8 @@ This repository is designed for technical review. All candidate details, employe
 - Strict separation of verified experience, transferable evidence, learning, gaps, and blockers
 - Local-only default binding and ignored runtime/private data
 - Separate user accounts with salted scrypt password hashes, server-side sessions, isolated resume uploads, and source-only ATS/job-description refinement
+- Per-user Chrome helper exports with isolated credentials and command channels, allowing multiple account-specific helpers in one browser profile
+- Protected global administration for the migrated Alex account, including user access, roles, and session revocation
 
 ## Architecture
 
@@ -68,7 +70,7 @@ The public audit rejects secrets, non-example email addresses, likely phone numb
 
 ## Manual mailbox reconciliation
 
-The dashboard creates a checkpoint-aware, metadata-first reconciliation request for a connected local assistant. Each run performs one bounded metadata search, exact-reads only new plausible lifecycle candidates in one batch, reconciles only new evidence, and checks the web only for useful domains absent from the active registry. This keeps cumulative lifecycle and source results complete without repeatedly loading known or irrelevant messages. The public repository contains no mailbox identities, messages, credentials, or reconciliation evidence.
+The dashboard creates a checkpoint-aware, metadata-first reconciliation request for a connected local assistant. Each run follows a bounded set of metadata pages, exact-reads only the oldest complete slice of new plausible lifecycle candidates, and advances the checkpoint only through mail that was fully reviewed. It reconciles only new evidence and checks the web only for useful domains absent from the active registry. This avoids the former 100-message deadlock without repeatedly loading known or irrelevant messages. The public repository contains no mailbox identities, messages, credentials, or reconciliation evidence.
 
 ## Privacy model
 

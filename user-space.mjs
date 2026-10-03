@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -19,6 +19,34 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.txt']);
 const nowIso = () => new Date().toISOString();
 const sha256 = value => createHash('sha256').update(value).digest('hex');
+
+const PROFILE_FIELDS = ['firstName','legalFirstName','lastName','email','phone','street','houseNumber','postalCode','city','countryDe','countryEn','nationalityDe','nationalityEn','salutationDe','salutationEn','workAuthorisationDe','workAuthorisationEn','desiredSalaryAnnualEur','weeklyHoursMin','weeklyHoursMax','germanLevel','englishLevel'];
+
+function cleanProfile(input={}) {
+  const profile={};
+  for(const field of PROFILE_FIELDS) profile[field]=String(input[field]??'').replace(/\s+/g,' ').trim().slice(0,180);
+  if(profile.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) throw httpError(400,'Enter a valid email address.','INVALID_EMAIL');
+  if(profile.desiredSalaryAnnualEur&&!/^\d{3,9}$/.test(profile.desiredSalaryAnnualEur)) throw httpError(400,'Salary must contain digits only.','INVALID_SALARY');
+  return profile;
+}
+
+function applicationProfile(profile) {
+  const p=cleanProfile(profile);
+  const location=[p.postalCode,p.city,p.countryEn||p.countryDe].filter(Boolean).join(', ');
+  return {identity:{name:[p.firstName,p.lastName].filter(Boolean).join(' '),email:p.email,phone:p.phone,location,linkedin:'',github:'',workAuthorisation:{de:p.workAuthorisationDe,en:p.workAuthorisationEn}},applicationForm:{firstName:p.firstName,legalFirstName:p.legalFirstName||p.firstName,lastName:p.lastName,salutation:{de:p.salutationDe,en:p.salutationEn},nationality:{de:p.nationalityDe,en:p.nationalityEn},phoneInternational:p.phone,address:[p.street,p.houseNumber,p.postalCode,p.city].filter(Boolean).join(' '),street:p.street,houseNumber:p.houseNumber,postalCode:p.postalCode,city:p.city,country:{de:p.countryDe,en:p.countryEn},desiredSalaryAnnualEur:p.desiredSalaryAnnualEur,weeklyHoursMin:p.weeklyHoursMin,weeklyHoursMax:p.weeklyHoursMax,germanLevel:p.germanLevel,englishLevel:p.englishLevel}};
+}
+
+function crc32(buffer) {
+  let crc=0xffffffff;
+  for(const byte of buffer){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
+  return (crc^0xffffffff)>>>0;
+}
+
+export function buildStoredZip(entries) {
+  const local=[],central=[]; let offset=0;
+  for(const entry of entries){const name=Buffer.from(entry.name.replace(/\\/g,'/'));const data=Buffer.isBuffer(entry.data)?entry.data:Buffer.from(entry.data);const crc=crc32(data);const header=Buffer.alloc(30);header.writeUInt32LE(0x04034b50);header.writeUInt16LE(20,4);header.writeUInt32LE(crc,14);header.writeUInt32LE(data.length,18);header.writeUInt32LE(data.length,22);header.writeUInt16LE(name.length,26);local.push(header,name,data);const directory=Buffer.alloc(46);directory.writeUInt32LE(0x02014b50);directory.writeUInt16LE(20,4);directory.writeUInt16LE(20,6);directory.writeUInt32LE(crc,16);directory.writeUInt32LE(data.length,20);directory.writeUInt32LE(data.length,24);directory.writeUInt16LE(name.length,28);directory.writeUInt32LE(offset,42);central.push(directory,name);offset+=header.length+name.length+data.length;}
+  const centralBuffer=Buffer.concat(central),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(entries.length,8);end.writeUInt16LE(entries.length,10);end.writeUInt32LE(centralBuffer.length,12);end.writeUInt32LE(offset,16);return Buffer.concat([...local,centralBuffer,end]);
+}
 
 function httpError(status, message, code='') {
   const error = new Error(message);
@@ -211,6 +239,7 @@ export function openUserSpaceDatabase(path) {
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE COLLATE NOCASE,
       display_name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -249,18 +278,50 @@ export function openUserSpaceDatabase(path) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_resume_drafts_user ON resume_drafts(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS application_profiles (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      profile_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS browser_extensions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      public_id TEXT NOT NULL UNIQUE,
+      token_hash TEXT NOT NULL,
+      manifest_key TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_browser_extensions_user ON browser_extensions(user_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS security_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT,
       event_type TEXT NOT NULL,
       occurred_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS user_space_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  const userColumns=new Set(db.prepare('PRAGMA table_info(users)').all().map(row=>row.name));
+  if(!userColumns.has('role')) db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  const rolloutKey='global_admin_rollout_2026_10_03';
+  if(!db.prepare('SELECT key FROM user_space_settings WHERE key=?').get(rolloutKey)) {
+    const exactAlex=db.prepare("SELECT id FROM users WHERE username='alex' COLLATE NOCASE LIMIT 1").get();
+    const namedAlex=db.prepare("SELECT id FROM users WHERE lower(display_name)='alex'").all();
+    const alexId=exactAlex?.id||(!exactAlex&&namedAlex.length===1?namedAlex[0].id:null);
+    if(alexId){db.prepare("UPDATE users SET role='global_admin',disabled_at=NULL,updated_at=? WHERE id=?").run(nowIso(),alexId);db.prepare('INSERT OR REPLACE INTO user_space_settings(key,value,updated_at) VALUES(?,?,?)').run('global_admin_user_id',alexId,nowIso());}
+    db.exec('DELETE FROM sessions');
+    db.prepare('INSERT INTO user_space_settings(key,value,updated_at) VALUES(?,?,?)').run(rolloutKey,'all_sessions_revoked',nowIso());
+  }
+  const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
+  if(protectedAdminId) db.prepare("UPDATE users SET role='global_admin',disabled_at=NULL,updated_at=? WHERE id=?").run(nowIso(),protectedAdminId);
   return db;
 }
 
 function publicUser(row) {
-  return row ? { id:row.id, username:row.username, displayName:row.display_name, createdAt:row.created_at } : null;
+  return row ? { id:row.id, username:row.username, displayName:row.display_name, role:row.role||'user', disabledAt:row.disabled_at||null, createdAt:row.created_at } : null;
 }
 
 function publicDocument(row) {
@@ -308,13 +369,13 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     const token = cookies[COOKIE_HTTPS] || cookies[COOKIE_HTTP] || '';
     if (!token) return null;
     const tokenHash = sha256(token);
-    const row = db.prepare(`SELECT s.*,u.username,u.display_name,u.created_at AS user_created_at,u.disabled_at
+    const row = db.prepare(`SELECT s.*,u.username,u.display_name,u.role,u.created_at AS user_created_at,u.disabled_at
       FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?`).get(tokenHash);
     if (!row || row.disabled_at || Date.parse(row.expires_at) <= Date.now()) {
       if (row) db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash);
       return null;
     }
-    return { tokenHash, row, user:{ id:row.user_id, username:row.username, display_name:row.display_name, created_at:row.user_created_at } };
+    return { tokenHash, row, user:{ id:row.user_id, username:row.username, display_name:row.display_name, role:row.role, disabled_at:row.disabled_at, created_at:row.user_created_at } };
   }
 
   function requireSession(req, { csrf=false }={}) {
@@ -322,6 +383,12 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     if (!session) throw httpError(401, 'Sign in to continue.', 'AUTH_REQUIRED');
     if (csrf && String(req.headers['x-csrf-token'] || '') !== session.row.csrf_token) throw httpError(403, 'The security token is missing or expired. Reload the account page.', 'CSRF_REJECTED');
     db.prepare('UPDATE sessions SET last_seen_at=? WHERE token_hash=?').run(nowIso(), session.tokenHash);
+    return session;
+  }
+
+  function requireAdmin(req,{csrf=false}={}) {
+    const session=requireSession(req,{csrf});
+    if(session.row.role!=='global_admin') throw httpError(403,'Global administrator access is required.','ADMIN_REQUIRED');
     return session;
   }
 
@@ -345,9 +412,10 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     const existing = db.prepare('SELECT id FROM users WHERE username=?').get(username);
     if (existing) throw httpError(409, 'That username is unavailable.', 'USERNAME_UNAVAILABLE');
     const passwordHash = await hashPassword(input.password);
-    const user = { id:randomUUID(), username, display_name:displayName, created_at:nowIso() };
-    db.prepare('INSERT INTO users(id,username,display_name,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?)')
-      .run(user.id, user.username, user.display_name, passwordHash, user.created_at, user.created_at);
+    const role='user';
+    const user = { id:randomUUID(), username, display_name:displayName, role, created_at:nowIso() };
+    db.prepare('INSERT INTO users(id,username,display_name,role,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)')
+      .run(user.id, user.username, user.display_name, user.role, passwordHash, user.created_at, user.created_at);
     recordSecurity(user.id, 'account_created');
     const session = createSession(user.id, req);
     clearAttempt();
@@ -399,6 +467,49 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return db.prepare("SELECT * FROM documents WHERE user_id=? AND kind='initial_resume' ORDER BY created_at DESC LIMIT 1").get(userId);
   }
 
+  function profileFor(userId) {
+    const row=db.prepare('SELECT profile_json FROM application_profiles WHERE user_id=?').get(userId);
+    return row ? JSON.parse(row.profile_json) : {};
+  }
+
+  async function saveProfile(req,res) {
+    const session=requireSession(req,{csrf:true});
+    const profile=cleanProfile(await readJson(req));
+    if(!profile.firstName||!profile.lastName||!profile.email) throw httpError(400,'First name, last name, and email are required.','PROFILE_REQUIRED');
+    db.prepare(`INSERT INTO application_profiles(user_id,profile_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at`).run(session.row.user_id,JSON.stringify(profile),nowIso());
+    recordSecurity(session.row.user_id,'application_profile_saved');
+    sendJson(res,200,{ok:true,applicationProfile:profile});
+  }
+
+  async function exportExtension(req,res) {
+    const session=requireSession(req,{csrf:true});
+    const profile=profileFor(session.row.user_id),resume=latestResume(session.row.user_id);
+    if(!profile.firstName||!profile.lastName||!profile.email) throw httpError(409,'Save the browser-helper profile first.','PROFILE_REQUIRED');
+    if(!resume||resume.mime_type!=='application/pdf') throw httpError(409,'Upload a PDF resume before exporting the browser helper.','PDF_RESUME_REQUIRED');
+    const id=randomUUID(),publicId=randomBytes(12).toString('hex'),token=randomBytes(32).toString('base64url');
+    const {publicKey}=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'der'}});
+    const manifestKey=publicKey.toString('base64');
+    db.prepare('INSERT INTO browser_extensions(id,user_id,public_id,token_hash,manifest_key,created_at) VALUES(?,?,?,?,?,?)').run(id,session.row.user_id,publicId,sha256(token),manifestKey,nowIso());
+    const extensionRoot=join(root,'chrome-helper-extension');
+    const names=['service-worker.js','offscreen.html','offscreen.js','popup.html','popup.js','popup.css'];
+    const manifest=JSON.parse(await readFile(join(extensionRoot,'manifest.json'),'utf8'));
+    manifest.name=`Alex Job Helper — ${session.user.display_name}`.slice(0,70); manifest.short_name=`Alex Job ${session.user.username}`.slice(0,30); manifest.key=manifestKey;
+    const config=`export const helperConfig=${JSON.stringify({publicId,token,displayName:session.user.display_name,username:session.user.username})};\n`;
+    const entries=[{name:'manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'profile-config.js',data:config}];
+    for(const name of names) entries.push({name,data:await readFile(join(extensionRoot,name))});
+    const archive=buildStoredZip(entries),filename=`alex-job-helper-${session.user.username}-${publicId.slice(0,6)}.zip`;
+    recordSecurity(session.row.user_id,'browser_extension_exported');
+    res.writeHead(200,securityHeaders({'content-type':'application/zip','content-disposition':`attachment; filename="${filename}"`,'content-length':String(archive.length)}));res.end(archive);
+  }
+
+  function extensionContext(req) {
+    const publicId=String(req.headers['x-alex-job-extension-id']||''),token=String(req.headers['x-alex-job-extension-token']||'');
+    if(!publicId&&!token) return null;
+    const row=db.prepare(`SELECT e.*,u.username,u.display_name,u.disabled_at FROM browser_extensions e JOIN users u ON u.id=e.user_id WHERE e.public_id=?`).get(publicId);
+    if(!row||row.disabled_at||!token||!timingSafeEqual(Buffer.from(row.token_hash),Buffer.from(sha256(token)))) throw httpError(401,'This personalised Chrome helper is not authorised. Export it again from your user space.','EXTENSION_AUTH_REQUIRED');
+    return {publicId,userId:row.user_id,user:{username:row.username,displayName:row.display_name},profile:applicationProfile(profileFor(row.user_id)),resume:latestResume(row.user_id)};
+  }
+
   async function refine(req, res) {
     const session = requireSession(req, { csrf:true });
     const input = await readJson(req, 250_000);
@@ -410,6 +521,33 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     db.prepare('INSERT INTO resume_drafts(id,user_id,source_document_id,mode,job_description_hash,result_json,created_at) VALUES(?,?,?,?,?,?,?)')
       .run(draft.id,draft.user_id,draft.source_document_id,draft.mode,draft.job_description_hash,draft.result_json,draft.created_at);
     sendJson(res, 201, { ok:true, draft:{ id:draft.id, mode:draft.mode, createdAt:draft.created_at, sourceDocumentId:source.id, ...result } });
+  }
+
+  function adminUsers(req,res) {
+    requireAdmin(req);
+    const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value||'';
+    const users=db.prepare(`SELECT u.id,u.username,u.display_name,u.role,u.created_at,u.updated_at,u.disabled_at,
+      COUNT(DISTINCT s.token_hash) AS active_sessions,COUNT(DISTINCT d.id) AS document_count
+      FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN documents d ON d.user_id=u.id
+      GROUP BY u.id ORDER BY CASE WHEN u.role='global_admin' THEN 0 ELSE 1 END,u.created_at`).all(nowIso());
+    sendJson(res,200,{ok:true,users:users.map(row=>({...publicUser(row),protectedGlobalAdmin:row.id===protectedAdminId,activeSessions:Number(row.active_sessions),documentCount:Number(row.document_count)}) )});
+  }
+
+  async function manageUser(req,res) {
+    const admin=requireAdmin(req,{csrf:true}),input=await readJson(req);
+    const userId=String(input.userId||''),action=String(input.action||'');
+    const target=db.prepare('SELECT * FROM users WHERE id=?').get(userId);
+    if(!target) throw httpError(404,'User account not found.','USER_NOT_FOUND');
+    const protectedAlex=target.id===(db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value||'');
+    if(protectedAlex&&['disable','make_user'].includes(action)) throw httpError(409,'The Alex global administrator cannot be disabled or demoted.','ADMIN_PROTECTED');
+    if(action==='disable'){db.prepare('UPDATE users SET disabled_at=?,updated_at=? WHERE id=?').run(nowIso(),nowIso(),userId);db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);}
+    else if(action==='enable') db.prepare('UPDATE users SET disabled_at=NULL,updated_at=? WHERE id=?').run(nowIso(),userId);
+    else if(action==='make_admin') db.prepare("UPDATE users SET role='global_admin',updated_at=? WHERE id=?").run(nowIso(),userId);
+    else if(action==='make_user') db.prepare("UPDATE users SET role='user',updated_at=? WHERE id=?").run(nowIso(),userId);
+    else if(action==='revoke_sessions') db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
+    else throw httpError(400,'Unsupported user-management action.','INVALID_ADMIN_ACTION');
+    recordSecurity(admin.row.user_id,`admin_${action}`);
+    sendJson(res,200,{ok:true,user:publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(userId))});
   }
 
   async function handle(req, res, url) {
@@ -439,9 +577,13 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
       } else if (url.pathname === '/api/user-space/session' && req.method === 'GET') {
         const session = rawSession(req);
         if (!session) sendJson(res, 200, { authenticated:false });
-        else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)) });
+        else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), applicationProfile:profileFor(session.row.user_id) });
       } else if (url.pathname === '/api/user-space/resume' && req.method === 'POST') await uploadResume(req, res);
       else if (url.pathname === '/api/user-space/refine' && req.method === 'POST') await refine(req, res);
+      else if (url.pathname === '/api/user-space/application-profile' && req.method === 'PUT') await saveProfile(req,res);
+      else if (url.pathname === '/api/user-space/chrome-extension' && req.method === 'POST') await exportExtension(req,res);
+      else if (url.pathname === '/api/user-space/admin/users' && req.method === 'GET') adminUsers(req,res);
+      else if (url.pathname === '/api/user-space/admin/users' && req.method === 'PATCH') await manageUser(req,res);
       else throw httpError(404, 'User-space endpoint not found.', 'NOT_FOUND');
     } catch (error) {
       sendJson(res, Number(error.status) || 500, { error:Number(error.status) >= 500 ? 'The user-space request could not be completed.' : error.message, code:error.code || '' });
@@ -449,5 +591,5 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return true;
   }
 
-  return { handle, db, close:() => db.close() };
+  return { handle, extensionContext, db, close:() => db.close() };
 }

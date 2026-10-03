@@ -34,7 +34,7 @@ export function openJobDatabase(path) {
     PRAGMA foreign_keys = ON;
     -- Keep the dashboard responsive when Excel, OneDrive, or reconciliation
     -- briefly holds a write lock; maintenance is deferred by the caller.
-    PRAGMA busy_timeout = 750;
+    PRAGMA busy_timeout = 30000;
     -- The live database sits in OneDrive. WAL keeps -wal and -shm files open
     -- for the lifetime of the server, so OneDrive continually retries them.
     -- DELETE uses a short-lived rollback journal and releases it after commit.

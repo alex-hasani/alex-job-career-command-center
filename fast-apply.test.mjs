@@ -56,6 +56,7 @@ test('website agent recognises common ATS fields and keeps continuation separate
   assert.match('Continue',websiteApplyInternals().ADVANCE);
   assert.doesNotMatch('Continue',websiteApplyInternals().FINAL);
   assert.ok(websiteApplyInternals().applicationCandidateScore({text:'Jetzt bewerben',href:'https://ats.example/apply/123'})>100);
+  assert.ok(websiteApplyInternals().applicationCandidateScore({text:'Auf diese Stelle bewerben',href:'https://careers.example.org/role/123'})>100);
   assert.equal(websiteApplyInternals().applicationCandidateScore({text:'Datenschutz',href:'https://example.org/privacy'}),-100);
   assert.equal(websiteApplyInternals().isLegalConsentHint('Ich stimme der Datenschutzerklärung zu'),true);
 });
@@ -140,7 +141,7 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /websiteApply\.posting\(job\.id\)/);
   assert.match(source, /website-apply-browser-jd/);
   const websiteAgent = await readFile(new URL('./website-apply-agent.mjs', import.meta.url), 'utf8');
-  assert.match(websiteAgent, /createChromeDevtoolsClient/);
+  assert.match(websiteAgent, /createChromeHelperClient/);
   assert.match(websiteAgent, /chrome\.newPage\(job\.url\)/);
   assert.match(websiteAgent, /Existing Google Chrome Default profile/);
   assert.doesNotMatch(websiteAgent, /connectOverCDP|launchPersistentContext|context\.close\(\)/);

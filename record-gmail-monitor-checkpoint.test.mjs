@@ -34,6 +34,10 @@ test('monitor checkpoint is isolated from email reconciliation metadata', async 
     } finally {
       verifyDb.db.close();
     }
+    execFileSync(process.execPath, [join(import.meta.dirname, 'record-gmail-monitor-checkpoint.mjs'), databasePath, 'REVIEWED_MESSAGES', '2', '0', 'CHECKPOINT_AT', '2026-09-10T10:30:00.000Z'], { encoding:'utf8' });
+    const boundaryDb = openJobDatabase(databasePath);
+    try { assert.equal(JSON.parse(boundaryDb.getMetadata('last_gmail_monitor_checkpoint').value).at,'2026-09-10T10:30:00.000Z'); }
+    finally { boundaryDb.db.close(); }
   } finally {
     await rm(directory, { recursive:true, force:true });
   }
