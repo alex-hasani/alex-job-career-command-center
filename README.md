@@ -63,6 +63,10 @@ npm run audit:public
 
 The public audit rejects secrets, non-example email addresses, likely phone numbers, private keys, runtime databases, generated documents, mailbox evidence, private state directories, and private Git history indicators.
 
+## Manual mailbox reconciliation
+
+The dashboard creates a checkpoint-aware, metadata-first reconciliation request for a connected local assistant. Each run performs one bounded metadata search, exact-reads only new plausible lifecycle candidates in one batch, reconciles only new evidence, and checks the web only for useful domains absent from the active registry. This keeps cumulative lifecycle and source results complete without repeatedly loading known or irrelevant messages. The public repository contains no mailbox identities, messages, credentials, or reconciliation evidence.
+
 ## Privacy model
 
 - `canonical-resume-profile.mjs` contains a clearly fictional profile.

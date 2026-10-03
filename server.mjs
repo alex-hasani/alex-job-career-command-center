@@ -14,6 +14,7 @@ import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
 import { appendActivityEvent, readActivityEvents } from './activity-log.mjs';
+import { buildGmailReconciliationPrompt, gmailReconciliationCheckpoint } from './gmail-reconciliation-prompt.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -1504,8 +1505,9 @@ const server = http.createServer(async (req, res) => {
       const input = await jsonBody(req);
       const requestedAt = new Date().toISOString();
       const days = Math.min(7, Math.max(1, Number(input.days) || 7));
-      const prompt = 'Review job-application emails in the connected account configured by the local operator from the last ' + days + ' days, including forwarded and attached messages. Read each exact message and reconcile only explicit application confirmations, interviews or changes, rejections, offers, withdrawals, cancellations, or case closures into SQLite, local career state, and the spreadsheet mirror. Preserve original email timestamps. For every reviewed message, identify useful job-board, recruiter, or employer-career domains; verify the official job-search or careers URL; deduplicate it by canonical domain against the active source registry; add only beneficial reachable sources to the local discovered-source file; and ignore login, tracking, unsubscribe, email-delivery, generic shared ATS, duplicate, and unavailable domains. Never send email and never apply.';
-      const request = { id:randomUUID(), status:'pending-codex', requestedAt, days, requestedBy:'dashboard', prompt, note:'Gmail access is intentionally delegated to the connected Codex Gmail connector; the local dashboard never stores Gmail credentials.' };
+      const checkpointMetadata = jobDb.getMetadata('last_gmail_monitor_checkpoint') || jobDb.getMetadata('last_email_reconciliation');
+      const prompt = buildGmailReconciliationPrompt({ days, primaryAccount:'the configured primary account', forwardedAccount:'the configured forwarding account', checkpointMetadata });
+      const request = { id:randomUUID(), status:'pending-codex', requestedAt, days, strategy:'incremental-metadata-first-v1', checkpointAt:gmailReconciliationCheckpoint(checkpointMetadata), requestedBy:'dashboard', prompt, note:'Mailbox access is intentionally delegated to the connected local assistant; the dashboard never stores mailbox credentials.' };
       await writeFile(emailReconciliationRequestPath, JSON.stringify(request, null, 2), 'utf8');
       jobDb.setMetadata('pending_email_reconciliation', JSON.stringify(request));
       res.writeHead(202, {'content-type':'application/json','cache-control':'no-store'});
