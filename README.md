@@ -1,6 +1,6 @@
 # Alex Job Career Command Center
 
-A privacy-safe public v1.0 of a local-first job-search application. It combines live vacancy discovery, evidence-based job evaluation, application tracking, and bilingual ATS-friendly document generation in one responsive dashboard.
+A privacy-safe public v1.2 of a local-first job-search application. It combines live vacancy discovery, evidence-based job evaluation, application tracking, bilingual ATS-friendly document generation, and an isolated multi-user resume workspace in one responsive dashboard.
 
 This repository is designed for technical review. All candidate details, employers, dates, metrics, mailbox evidence, applications, and commute origins are fictional or generic. The operational repository and runtime data remain private.
 
@@ -17,6 +17,7 @@ This repository is designed for technical review. All candidate details, employe
 - Optional Fast Apply email preview with reviewed PDF attachments and explicit Gmail send confirmation
 - Strict separation of verified experience, transferable evidence, learning, gaps, and blockers
 - Local-only default binding and ignored runtime/private data
+- Separate user accounts with salted scrypt password hashes, server-side sessions, isolated resume uploads, and source-only ATS/job-description refinement
 
 ## Architecture
 
@@ -51,6 +52,8 @@ npm start
 ```
 
 Open `http://localhost:8787`. The server binds to `127.0.0.1` unless `HOST` is explicitly set. Runtime state is created under `runtime/`, which is ignored by Git. To store runtime files elsewhere, set `ALEX_JOB_DATA_DIR` to an absolute local directory.
+
+Open `http://localhost:8787/user-space` for the additive account and resume workspace. Security and evidence boundaries are documented in `USER_SPACE.md`; the original dashboard routes remain unchanged.
 
 Spreadsheet import/export uses `@oai/artifact-tool` when running inside its supported workspace runtime. The dashboard, SQLite workflow, search, scoring, and document engine remain inspectable independently.
 

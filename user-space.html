@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Alex Job · User space</title>
+  <link rel="stylesheet" href="/user-space.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">PRIVATE CAREER WORKSPACE</p>
+      <h1>Your evidence, refined—not invented.</h1>
+      <p>Keep an isolated account, upload the source resume once, and create ATS-friendly or job-focused drafts that remain traceable to your own evidence.</p>
+    </header>
+
+    <section id="authPanel" class="grid auth-grid">
+      <form id="loginForm" class="card">
+        <h2>Sign in</h2>
+        <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="64"></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label>
+        <button type="submit">Sign in securely</button>
+      </form>
+      <form id="registerForm" class="card">
+        <h2>Create account</h2>
+        <label>Display name<input name="displayName" autocomplete="name" required minlength="2" maxlength="100"></label>
+        <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}"></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
+        <p class="hint">Use at least 12 characters. The password is salted and hashed; it is never stored as readable text.</p>
+        <button type="submit">Create private workspace</button>
+      </form>
+    </section>
+
+    <section id="workspacePanel" class="workspace hidden">
+      <div class="account-bar">
+        <div><span class="eyebrow">SIGNED IN</span><strong id="accountName"></strong></div>
+        <button id="logoutButton" class="secondary" type="button">Sign out</button>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <h2>1. Source resume</h2>
+          <p>Upload a text-based PDF or TXT file, maximum 8 MB. The original file stays unchanged in your isolated backend folder.</p>
+          <label class="upload">Choose initial resume<input id="resumeFile" type="file" accept=".pdf,.txt,application/pdf,text/plain"></label>
+          <button id="uploadButton" type="button">Upload source resume</button>
+          <div id="resumeStatus" class="status muted">No resume loaded.</div>
+        </section>
+
+        <section class="card">
+          <h2>2. ATS base</h2>
+          <p>Normalize the resume for machine reading without adding claims, skills, employers, dates, or achievements.</p>
+          <button id="baseButton" type="button">Create evidence-safe ATS draft</button>
+        </section>
+      </div>
+
+      <section class="card full">
+        <h2>3. Tailor to a job description</h2>
+        <label>Exact job description<textarea id="jobDescription" rows="10" placeholder="Paste the complete job description here."></textarea></label>
+        <button id="tailorButton" type="button">Prioritize my verified evidence</button>
+        <p class="hint">Terms that are absent from your resume appear only as review gaps. They are never inserted into the draft.</p>
+      </section>
+
+      <section id="resultPanel" class="card full hidden">
+        <div class="result-heading"><h2>Draft result</h2><span id="draftMode" class="badge"></span></div>
+        <p id="draftGuidance"></p>
+        <div class="grid result-grid">
+          <div><h3>Matched evidence</h3><ul id="priorityEvidence"></ul></div>
+          <div><h3>Review-only gaps</h3><div id="missingKeywords" class="chips"></div></div>
+        </div>
+        <label>ATS-clean source text<textarea id="atsText" rows="18" readonly></textarea></label>
+      </section>
+    </section>
+
+    <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+  </main>
+  <script src="/user-space.js" defer></script>
+</body>
+</html>

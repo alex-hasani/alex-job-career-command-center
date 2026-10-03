@@ -16,6 +16,7 @@ import { matchesLocation } from './filter-logic.js';
 import { appendActivityEvent, readActivityEvents } from './activity-log.mjs';
 import { buildGmailReconciliationPrompt, gmailReconciliationCheckpoint } from './gmail-reconciliation-prompt.mjs';
 import { isTechnicalRole } from './job-role-scope.mjs';
+import { createUserSpaceRouter } from './user-space.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -38,6 +39,12 @@ const sqlitePath = join(workspace, 'State', 'job_search.sqlite');
 const emailReconciliationRequestPath = join(workspace, 'State', 'gmail_reconciliation_request.json');
 const activityLogPath = join(workspace, 'State', 'app-activity-log.jsonl');
 const logActivity = event => appendActivityEvent(activityLogPath, event).catch(error => console.error('Activity log failure:', error.message));
+const userSpace = createUserSpaceRouter({
+  root,
+  workspace,
+  databasePath:process.env.USER_SPACE_DB_PATH || undefined,
+  storageRoot:process.env.USER_SPACE_STORAGE_ROOT || undefined,
+});
 mkdirSync(join(workspace, 'State'), { recursive:true });
 const jobDb = openJobDatabase(sqlitePath);
 const coverLetters = createCoverLetterService({ workspace, approvedEvidencePath:join(workspace, 'Evidence_Bank', 'approved_evidence.json') });
@@ -1488,6 +1495,7 @@ const server = http.createServer(async (req, res) => {
   const auditable = url.pathname.startsWith('/api/') && req.method !== 'GET';
   if (auditable) res.once('finish', () => logActivity({ action:req.method + ' ' + url.pathname, result:res.statusCode < 400 ? 'completed' : 'failed', detail:'HTTP ' + res.statusCode }));
   try {
+    if (await userSpace.handle(req, res, url)) return;
     requireCurrentClientVersion(req, url);
     if (url.pathname === '/api/app-version') {
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
