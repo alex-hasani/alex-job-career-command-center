@@ -15,6 +15,7 @@ import { assessAgainstResume } from './resume-assessment.mjs';
 import { matchesLocation } from './filter-logic.js';
 import { appendActivityEvent, readActivityEvents } from './activity-log.mjs';
 import { buildGmailReconciliationPrompt, gmailReconciliationCheckpoint } from './gmail-reconciliation-prompt.mjs';
+import { isTechnicalRole } from './job-role-scope.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -1215,8 +1216,8 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
   const [automaticResults, directResults] = await Promise.all([automaticPromise, directPromise]);
   const results = [...automaticResults, ...directResults];
   onProgress({ progress:84, phase:'Matching and deduplicating full-pool results', completedSources, totalSources });
-  const saved = await agentJobs();
-  const live = filter(results.flatMap(x => x.jobs), query, location, includeRemoteAnywhere).map(score);
+  const saved = (await agentJobs()).filter(isTechnicalRole);
+  const live = filter(results.flatMap(x => x.jobs), query, location, includeRemoteAnywhere).filter(isTechnicalRole).map(score);
   jobDb.saveRefresh(live, results, refreshId);
   const jobs = dedupe([...saved, ...live]).sort((a,b) => {
     if (a.origin === 'agent' && b.origin !== 'agent') return -1;
@@ -1227,7 +1228,7 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
     { source:'Job Search Agent', status:'ok', count:saved.length },
     ...results.map(({source,status,message,jobs,latencyMs,checkedAt}) => ({source,status,message,count:jobs.length,latencyMs,checkedAt}))
   ];
-  const data = { refreshedAt:new Date().toISOString(), query, location, profile:{ title:'Infrastructure Engineer / Systems Administrator', workAuthorisation:'Loaded from the private local profile', skills:Object.keys(profile.skills) }, sourceStatus, directSources:await providerDirectory(query, location), agentLeadCount:saved.length, jobs:jobDb.listJobs({ includeInactive:true }).map(assessJob), databaseStats:jobDb.stats() };
+  const data = { refreshedAt:new Date().toISOString(), query, location, profile:{ title:'Infrastructure Engineer / Systems Administrator', workAuthorisation:'Loaded from the private local profile', skills:Object.keys(profile.skills) }, sourceStatus, directSources:await providerDirectory(query, location), agentLeadCount:saved.length, jobs:jobDb.listJobs({ includeInactive:true }).filter(isTechnicalRole).map(assessJob), databaseStats:jobDb.stats() };
   onProgress({ progress:90, phase:'Saving SQLite database', completedSources, totalSources });
   await writeFile(liveDatabasePath, JSON.stringify(data, null, 2), 'utf8');
   onProgress({ progress:94, phase:'Synchronising SQLite to Excel', completedSources, totalSources });
@@ -1239,7 +1240,7 @@ async function loadDatabase(params) {
   // The saved SQLite state is sufficient to render the dashboard. Tracker
   // imports and maintenance run only from explicit data workflows, never while
   // the browser is waiting for its initial dashboard response.
-  const saved = await agentJobs({ persist:false });
+  const saved = (await agentJobs({ persist:false })).filter(isTechnicalRole);
   if (excelMirrorIsDue()) queueExcelMirror('scheduled-3h');
   if (databaseBackupIsDue()) queueDatabaseBackup('scheduled-3h').catch(() => {});
   let cached = null;
@@ -1247,7 +1248,7 @@ async function loadDatabase(params) {
   // Filters run instantly in the browser, so every canonical SQLite record
   // must reach the client. Truncating this list before location filtering made
   // cities outside the dominant Stuttgart dataset appear almost empty.
-  const jobs = jobDb.listJobs({ includeInactive:true }).map(assessJob).sort((a,b) => a.origin === 'agent' && b.origin !== 'agent' ? -1 : b.origin === 'agent' && a.origin !== 'agent' ? 1 : b.match-a.match);
+  const jobs = jobDb.listJobs({ includeInactive:true }).map(assessJob).filter(isTechnicalRole).sort((a,b) => a.origin === 'agent' && b.origin !== 'agent' ? -1 : b.origin === 'agent' && a.origin !== 'agent' ? 1 : b.match-a.match);
   const savedSearches = jobDb.listSavedSearches();
   let activeSavedSearchId = jobDb.getMetadata('active_saved_search_id')?.value || '';
   if (!savedSearches.some(search => search.id === activeSavedSearchId)) {

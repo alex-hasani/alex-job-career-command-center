@@ -46,10 +46,11 @@ test('website agent recognises common ATS fields and keeps continuation separate
   assert.equal(fieldKindForHint('Visa sponsorship required'),'sponsorshipRequired');
   assert.equal(fieldKindForHint('Aufenthaltstitel'),'residencePermit');
   assert.equal(websiteApplyInternals().fileKindForHint('Lebenslauf hochladen'),'cv');
-  assert.equal(websiteApplyInternals().fileKindForHint('Weitere Dokumente'),'cv');
+  assert.equal(websiteApplyInternals().fileKindForHint('Weitere Dokumente'),'');
+  assert.equal(websiteApplyInternals().fileKindForHint('Weitere Dokumente (optional) wie z. B. Arbeitszeugnisse, Führerscheine etc.'),'');
   assert.equal(websiteApplyInternals().fileKindForHint('Anschreiben'),'letter');
   const uploaded=new Set(['cv']);
-  assert.equal(websiteApplyInternals().nextUploadKind('Weitere Dokumente',uploaded),'');
+  assert.equal(websiteApplyInternals().nextUploadKind('Weitere Dokumente',uploaded),'letter');
   assert.equal(websiteApplyInternals().nextUploadKind('Anschreiben',uploaded),'letter');
   assert.match(websiteApplyInternals().applicationNote({title:'Modern Workplace Administrator',company:'Example GmbH',description:'Microsoft 365 Intune Entra ID'},'de','Sample Candidate','In drei Monaten.'),/Microsoft 365, Intune, Entra ID/);
   assert.match('Continue',websiteApplyInternals().ADVANCE);
