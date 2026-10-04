@@ -74,6 +74,17 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /Global administration/);
   assert.match(html, /Account and security/);
   assert.match(html, /name="birthDate"/);
+  assert.match(html, /data-dialog="helperDialog"/);
+  assert.match(html, /id="helperDialog" class="workspace-dialog workspace-dialog-wide"/);
+});
+
+test('mobile shell uses stable short controls and updates do not force open pages home', async () => {
+  const html=await readFile(new URL('./index.html',import.meta.url),'utf8');
+  const worker=await readFile(new URL('./service-worker.js',import.meta.url),'utf8');
+  assert.match(html,/id="readyToSendButton"[^>]*>Queue<\/button>/);
+  assert.doesNotMatch(html,/id="installApp"/);
+  assert.doesNotMatch(html,/beforeinstallprompt/);
+  assert.doesNotMatch(worker,/client\.navigate\(/);
 });
 
 test('canonical profile mapping includes the complete application defaults without invention', () => {

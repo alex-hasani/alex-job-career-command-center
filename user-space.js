@@ -1,6 +1,21 @@
 const $ = selector => document.querySelector(selector);
 let csrfToken = '';
 
+function openDialog(id) {
+  const dialog = document.getElementById(id);
+  if (!dialog) return;
+  document.body.classList.add('dialog-open');
+  if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+  else dialog.setAttribute('open', '');
+}
+
+function closeDialog(dialog) {
+  if (!dialog) return;
+  if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+  else dialog.removeAttribute('open');
+  if (!document.querySelector('dialog[open]')) document.body.classList.remove('dialog-open');
+}
+
 function showMessage(text, error=false) {
   const node = $('#message');
   node.textContent = text;
@@ -37,6 +52,7 @@ function setSignedOut() {
   $('#workspacePanel').classList.add('hidden');
   $('#authPanel').classList.remove('hidden');
   $('#adminPanel').classList.add('hidden');
+  document.querySelectorAll('dialog[open]').forEach(closeDialog);
 }
 
 function renderResume(document) {
@@ -103,8 +119,7 @@ async function createDraft(jobDescription='') {
     $('#missingKeywords').replaceChildren(...draft.missingKeywords.slice(0, 30).map(keyword => {
       const span = document.createElement('span'); span.textContent = keyword; return span;
     }));
-    $('#resultPanel').classList.remove('hidden');
-    $('#resultPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+    openDialog('resultDialog');
   } catch (error) { showMessage(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -158,6 +173,12 @@ $('#exportExtensionButton').addEventListener('click',async()=>{
   } catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#refreshUsersButton').addEventListener('click',()=>loadAdminUsers().catch(error=>showMessage(error.message,true)));
+document.querySelectorAll('[data-dialog]').forEach(button=>button.addEventListener('click',()=>openDialog(button.dataset.dialog)));
+document.querySelectorAll('[data-close-dialog]').forEach(button=>button.addEventListener('click',()=>closeDialog(button.closest('dialog'))));
+document.querySelectorAll('dialog.workspace-dialog').forEach(dialog=>{
+  dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog);});
+  dialog.addEventListener('close',()=>{if(!document.querySelector('dialog[open]'))document.body.classList.remove('dialog-open');});
+});
 
 async function verifySession({initial=false}={}) {
   try {
@@ -169,7 +190,7 @@ async function verifySession({initial=false}={}) {
   return false;
 }
 void verifySession({initial:true});
-if(location.pathname.startsWith('/profile')) window.addEventListener('load',()=>$('#accountProfilePanel').scrollIntoView({block:'start'}),{once:true});
+if(location.pathname.startsWith('/profile')) window.addEventListener('load',()=>openDialog('accountDialog'),{once:true});
 setInterval(()=>void verifySession(),5000);
 window.addEventListener('focus',()=>void verifySession());
 window.addEventListener('pageshow',()=>void verifySession());

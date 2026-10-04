@@ -105,8 +105,20 @@
         gap: 12px;
         min-width: 0;
       }
-      #installApp {
+      .top-actions :is(button,a) {
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 800;
+        text-decoration: none;
         white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .mark {
         display: grid;
@@ -1059,7 +1071,7 @@
         .brand { font-size:16px; }
         .mark { width:34px; height:34px; }
         .top-actions { margin-left:auto; gap:7px; }
-        .theme-toggle,#installApp { min-height:38px; padding:6px 8px; font-size:11px; }
+        .top-actions :is(button,a) { min-height:38px; padding:0 8px; font-size:11px; }
         .top .muted {
           display: none;
         }
@@ -1128,10 +1140,9 @@
           <span class="muted">/ flexible IT job search</span>
         </div>
         <div class="top-actions">
-          <button class="theme-toggle" id="readyToSendButton" type="button">Ready to send</button>
-          <a class="link" href="/profile">Profile</a>
-          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Change colour theme">◐ Theme</button>
-          <button class="link" id="installApp" type="button">Install app</button>
+          <button class="theme-toggle" id="readyToSendButton" type="button" aria-label="Open ready-to-send queue">Queue</button>
+          <a class="theme-toggle" href="/profile">Profile</a>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Change colour theme">Theme</button>
           <span class="muted" id="updated">Not refreshed yet</span>
         </div>
       </header>
@@ -1646,7 +1657,8 @@
         const resolved = theme === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : theme;
         document.documentElement.dataset.theme = resolved;
         localStorage.setItem("alex-jobs-theme", theme);
-        $("themeToggle").textContent = resolved === "dark" ? "☾ Dark" : "☀ Light";
+        $("themeToggle").textContent = "Theme";
+        $("themeToggle").setAttribute("aria-pressed", resolved === "dark" ? "true" : "false");
         document.querySelector('meta[name="theme-color"]').content = resolved === "dark" ? "#0c1421" : "#11233f";
       }
       setTheme(startup.get("theme") || localStorage.getItem("alex-jobs-theme") || "system");
@@ -1718,23 +1730,6 @@
         savedSearches = data.searches || [];
         activeSavedSearchId = data.activeSavedSearchId || "";
         renderSavedSearches();
-      };
-      let installPrompt = null;
-      window.addEventListener("beforeinstallprompt", (event) => {
-        event.preventDefault();
-        installPrompt = event;
-      });
-      $("installApp").onclick = async () => {
-        if (installPrompt) {
-          installPrompt.prompt();
-          await installPrompt.userChoice;
-          installPrompt = null;
-          return;
-        }
-        const isiPhone = /iphone|ipad|ipod/i.test(navigator.userAgent);
-        alert(isiPhone
-          ? "In Safari, tap Share, then Add to Home Screen, then Add. Keep Tailscale connected when opening the app away from your desktop network."
-          : "Use your browser menu and choose Install app or Create shortcut. On iPhone, open this page in Safari and use Share > Add to Home Screen.");
       };
       if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
         navigator.serviceWorker.register("/service-worker.js").catch(() => {});

@@ -35,55 +35,51 @@
       <div class="account-bar">
         <div><span class="eyebrow">SIGNED IN</span><strong id="accountName"></strong></div>
         <div class="account-actions">
-          <a class="button-link" href="/dashboard">Open career dashboard</a>
+          <a class="button-link" href="/dashboard">Dashboard</a>
           <a class="button-link secondary" href="/profile">Profile</a>
           <button id="logoutButton" class="secondary" type="button">Sign out</button>
         </div>
       </div>
 
-      <section id="accountProfilePanel" class="card full">
-        <h2>Account and security</h2>
-        <div class="grid">
-          <form id="accountDetailsForm">
-            <label>Display name<input name="displayName" autocomplete="name" required minlength="2" maxlength="100"></label>
-            <button type="submit">Save account details</button>
-          </form>
-          <form id="passwordForm">
-            <label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label>
-            <label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
-            <p class="hint">Changing your password signs out every other session.</p>
-            <button type="submit">Change password</button>
-          </form>
+      <section class="workspace-launcher grid" aria-label="Workspace tools">
+        <button class="feature-button" type="button" data-dialog="accountDialog"><strong>Account</strong><span>Details and password</span></button>
+        <button class="feature-button" type="button" data-dialog="resumeDialog"><strong>Resume</strong><span>Upload source file</span></button>
+        <button class="feature-button" type="button" data-dialog="atsDialog"><strong>ATS draft</strong><span>Create clean base</span></button>
+        <button class="feature-button" type="button" data-dialog="tailorDialog"><strong>Tailor CV</strong><span>Use a job description</span></button>
+        <button class="feature-button" type="button" data-dialog="helperDialog"><strong>Apply profile</strong><span>Fields and Chrome helper</span></button>
+        <button id="adminPanel" class="feature-button hidden" type="button" data-dialog="adminDialog"><strong>Users</strong><span>Global administration</span></button>
+      </section>
+
+      <dialog id="accountDialog" class="workspace-dialog">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">PROFILE</span><h2>Account and security</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body grid">
+            <form id="accountDetailsForm"><label>Display name<input name="displayName" autocomplete="name" required minlength="2" maxlength="100"></label><button type="submit">Save details</button></form>
+            <form id="passwordForm"><label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label><label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label><p class="hint">Changing your password signs out every other session.</p><button type="submit">Change password</button></form>
+          </div>
         </div>
-      </section>
+      </dialog>
 
-      <div class="grid">
-        <section class="card">
-          <h2>1. Source resume</h2>
-          <p>Upload a text-based PDF or TXT file, maximum 8 MB. The original file stays unchanged in your isolated backend folder.</p>
-          <label class="upload">Choose initial resume<input id="resumeFile" type="file" accept=".pdf,.txt,application/pdf,text/plain"></label>
-          <button id="uploadButton" type="button">Upload source resume</button>
-          <div id="resumeStatus" class="status muted">No resume loaded.</div>
-        </section>
+      <dialog id="resumeDialog" class="workspace-dialog">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">STEP 1</span><h2>Source resume</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><p>Upload a text-based PDF or TXT file, maximum 8 MB. The original stays unchanged in your isolated backend folder.</p><label class="upload">Choose resume<input id="resumeFile" type="file" accept=".pdf,.txt,application/pdf,text/plain"></label><button id="uploadButton" type="button">Upload resume</button><div id="resumeStatus" class="status muted">No resume loaded.</div></div>
+        </div>
+      </dialog>
 
-        <section class="card">
-          <h2>2. ATS base</h2>
-          <p>Normalize the resume for machine reading without adding claims, skills, employers, dates, or achievements.</p>
-          <button id="baseButton" type="button">Create evidence-safe ATS draft</button>
-        </section>
-      </div>
+      <dialog id="atsDialog" class="workspace-dialog">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">STEP 2</span><h2>ATS base</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><p>Normalize the resume for machine reading without adding claims, skills, employers, dates, or achievements.</p><button id="baseButton" type="button">Create ATS draft</button></div>
+        </div>
+      </dialog>
 
-      <section class="card full">
-        <h2>3. Tailor to a job description</h2>
-        <label>Exact job description<textarea id="jobDescription" rows="10" placeholder="Paste the complete job description here."></textarea></label>
-        <button id="tailorButton" type="button">Prioritize my verified evidence</button>
-        <p class="hint">Terms that are absent from your resume appear only as review gaps. They are never inserted into the draft.</p>
-      </section>
+      <dialog id="tailorDialog" class="workspace-dialog">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">STEP 3</span><h2>Tailor to a job</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><label>Exact job description<textarea id="jobDescription" rows="10" placeholder="Paste the complete job description here."></textarea></label><button id="tailorButton" type="button">Tailor CV</button><p class="hint">Terms absent from your resume remain review gaps and are never inserted as claims.</p></div>
+        </div>
+      </dialog>
 
-      <section id="applicationProfilePanel" class="card full">
-        <h2>4. Personal Chrome helper</h2>
-        <p>Save the application details that belong to this account, then export its own helper. Every export has a distinct Chrome identity, so helpers for different users can be installed side by side.</p>
-        <form id="applicationProfileForm" class="grid">
+      <dialog id="helperDialog" class="workspace-dialog workspace-dialog-wide">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">STEP 4</span><h2>Application profile</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><p>Review the form details for this account and export its own Chrome helper.</p><form id="applicationProfileForm" class="grid">
           <label>First name<input name="firstName" autocomplete="given-name" required></label>
           <label>Legal first name<input name="legalFirstName" autocomplete="off"></label>
           <label>Last name<input name="lastName" autocomplete="family-name" required></label>
@@ -128,30 +124,17 @@
           <label>English level<input name="englishLevel"></label>
           <label>Start availability (German)<input name="startAvailabilityDe"></label>
           <label>Start availability (English)<input name="startAvailabilityEn"></label>
-        </form>
-        <div class="account-actions">
-          <button id="saveProfileButton" type="button">Save application profile</button>
-          <button id="exportExtensionButton" class="secondary" type="button">Export my Chrome helper</button>
+          </form><div class="account-actions"><button id="saveProfileButton" type="button">Save profile</button><button id="exportExtensionButton" class="secondary" type="button">Export helper</button></div><p class="hint">The export contains a revocable account-specific token, never your password. The helper stops before final submission.</p></div>
         </div>
-        <p class="hint">The export contains a revocable account-specific access token, never your password. Keep the ZIP private. The helper stops before final submission.</p>
-      </section>
+      </dialog>
 
-      <section id="resultPanel" class="card full hidden">
-        <div class="result-heading"><h2>Draft result</h2><span id="draftMode" class="badge"></span></div>
-        <p id="draftGuidance"></p>
-        <div class="grid result-grid">
-          <div><h3>Matched evidence</h3><ul id="priorityEvidence"></ul></div>
-          <div><h3>Review-only gaps</h3><div id="missingKeywords" class="chips"></div></div>
-        </div>
-        <label>ATS-clean source text<textarea id="atsText" rows="18" readonly></textarea></label>
-      </section>
+      <dialog id="resultDialog" class="workspace-dialog workspace-dialog-wide">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">RESULT</span><h2>ATS draft</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header><section id="resultPanel" class="dialog-body"><div class="result-heading"><h3>Draft result</h3><span id="draftMode" class="badge"></span></div><p id="draftGuidance"></p><div class="grid result-grid"><div><h3>Matched evidence</h3><ul id="priorityEvidence"></ul></div><div><h3>Review-only gaps</h3><div id="missingKeywords" class="chips"></div></div></div><label>ATS-clean source text<textarea id="atsText" rows="18" readonly></textarea></label></section></div>
+      </dialog>
 
-      <section id="adminPanel" class="card full hidden">
-        <div class="result-heading"><h2>Global administration</h2><span class="badge">Alex · full access</span></div>
-        <p>Manage account roles, access, and active sessions. The Alex global-administrator account is protected from demotion and disabling.</p>
-        <button id="refreshUsersButton" type="button">Refresh users</button>
-        <div id="adminUsers" class="admin-users"></div>
-      </section>
+      <dialog id="adminDialog" class="workspace-dialog workspace-dialog-wide">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">ADMIN</span><h2>Global administration</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header><div class="dialog-body"><div class="result-heading"><p>Manage user access, roles, password resets, and active sessions.</p><span class="badge">Alex · full access</span></div><button id="refreshUsersButton" type="button">Refresh users</button><div id="adminUsers" class="admin-users"></div></div></div>
+      </dialog>
     </section>
 
     <div id="message" class="message hidden" role="status" aria-live="polite"></div>
