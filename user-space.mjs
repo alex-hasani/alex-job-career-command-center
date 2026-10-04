@@ -506,6 +506,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
 
   async function changePassword(req,res) {
     const session=requireSession(req,{csrf:true}),input=await readJson(req),currentPassword=String(input.currentPassword||''),newPassword=validatePassword(input.newPassword);
+    if(newPassword!==String(input.confirmNewPassword||'')) throw httpError(400,'The new passwords do not match.','PASSWORD_MISMATCH');
     const user=db.prepare('SELECT * FROM users WHERE id=?').get(session.row.user_id);
     if(!await verifyPassword(currentPassword,user.password_hash)) throw httpError(403,'Current password is incorrect.','PASSWORD_INCORRECT');
     db.prepare('UPDATE users SET password_hash=?,updated_at=? WHERE id=?').run(await hashPassword(newPassword),nowIso(),user.id);

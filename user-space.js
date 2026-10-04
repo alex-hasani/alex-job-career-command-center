@@ -18,11 +18,19 @@ function closeDialog(dialog) {
 
 function showMessage(text, error=false) {
   const node = $('#message');
-  node.textContent = text;
+  node.querySelector('span').textContent = text;
   node.classList.toggle('error', error);
-  node.classList.remove('hidden');
+  if (node.open) node.close();
+  if (typeof node.showModal === 'function') node.showModal();
+  else node.setAttribute('open', '');
   clearTimeout(showMessage.timer);
-  showMessage.timer = setTimeout(() => node.classList.add('hidden'), 6500);
+  showMessage.timer = setTimeout(() => closeSystemMessage(), 5000);
+}
+
+function closeSystemMessage() {
+  const node=$('#message');
+  if (typeof node.close === 'function' && node.open) node.close();
+  else node.removeAttribute('open');
 }
 
 async function api(path, options={}) {
@@ -136,8 +144,10 @@ $('#accountDetailsForm').addEventListener('submit',async event=>{
   catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#passwordForm').addEventListener('submit',async event=>{
-  event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
-  try { await api('/api/user-space/password',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries()))});event.currentTarget.reset();showMessage('Password changed. Other sessions were signed out.'); }
+  event.preventDefault();const button=event.currentTarget.querySelector('button'),body=Object.fromEntries(new FormData(event.currentTarget).entries());
+  if(body.newPassword!==body.confirmNewPassword)return showMessage('The new passwords do not match.',true);
+  button.disabled=true;
+  try { await api('/api/user-space/password',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});event.currentTarget.reset();showMessage('Password changed. Other sessions were signed out.'); }
   catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#uploadButton').addEventListener('click', async () => {
@@ -179,6 +189,7 @@ document.querySelectorAll('dialog.workspace-dialog').forEach(dialog=>{
   dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog);});
   dialog.addEventListener('close',()=>{if(!document.querySelector('dialog[open]'))document.body.classList.remove('dialog-open');});
 });
+$('#message').querySelector('.message-close').addEventListener('click',closeSystemMessage);
 
 async function verifySession({initial=false}={}) {
   try {

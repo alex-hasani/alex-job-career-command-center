@@ -87,6 +87,17 @@ test('mobile shell uses stable short controls and updates do not force open page
   assert.doesNotMatch(worker,/client\.navigate\(/);
 });
 
+test('password changes require confirmation and system messages use the top dialog layer', async () => {
+  const html=await readFile(new URL('./user-space.html',import.meta.url),'utf8');
+  const client=await readFile(new URL('./user-space.js',import.meta.url),'utf8');
+  const server=await readFile(new URL('./user-space.mjs',import.meta.url),'utf8');
+  assert.match(html,/name="confirmNewPassword"/);
+  assert.match(html,/<dialog id="message"/);
+  assert.match(client,/body\.newPassword!==body\.confirmNewPassword/);
+  assert.match(client,/node\.showModal\(\)/);
+  assert.match(server,/PASSWORD_MISMATCH/);
+});
+
 test('canonical profile mapping includes the complete application defaults without invention', () => {
   const profile=profileFromCanonical({identity:{email:'candidate@example.com',phone:'+1 555 0100',workAuthorisation:{de:'Ja',en:'Yes'}},applicationForm:{firstName:'Taylor',legalFirstName:'Avery',lastName:'Example',birthDate:'1990-01-15',euWorkPermit:{de:'Ja',en:'Yes'},commute:{de:'Pendeln',en:'Commute'},desiredSalaryAnnualEur:75000}});
   assert.equal(profile.firstName,'Taylor');
