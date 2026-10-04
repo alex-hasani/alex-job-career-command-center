@@ -1,4 +1,4 @@
-const CACHE = "alex-job-shell-v34-stable-mobile-dialogs";
+const CACHE = "alex-job-shell-v35-account-library";
 const SHELL = ["/", "/index.html", "/filter-logic.js", "/manifest.webmanifest", "/app-icon.svg"];
 
 self.addEventListener("install", event => {
@@ -15,7 +15,7 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
+  if (url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname === "/" || url.pathname.startsWith("/user-space") || url.pathname.startsWith("/profile")) return;
   event.respondWith(fetch(event.request)
     .then(response => {
       const copy = response.clone();

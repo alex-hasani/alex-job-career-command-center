@@ -48,10 +48,10 @@ function setAuthenticated(data) {
   $('#workspacePanel').classList.remove('hidden');
   $('#accountName').textContent = `${data.user.displayName} · ${data.user.username}`;
   $('#accountDetailsForm').elements.displayName.value=data.user.displayName||'';
-  renderResume(data.resume || null);
-  renderDocuments(data.documents || []);
-  renderSkills(data.skills || []);
   renderApplicationProfile(data.applicationProfile || {});
+  renderResume(data.resume || null);
+  renderSkills(data.skills || []);
+  renderDocuments(data.documents || []);
   if (data.libraryError) showMessage(`Document library could not be loaded: ${data.libraryError}`, true);
   const isAdmin=data.user.role==='global_admin';
   $('#adminPanel').classList.toggle('hidden',!isAdmin);
@@ -81,12 +81,12 @@ function renderDocuments(documents) {
   const labels={initial_resume:'Uploaded resume',resume_de:'CV · German',resume_en:'CV · English',cover_letter_de:'Cover letter · German',cover_letter_en:'Cover letter · English',zeugnisse:'Zeugnisse'};
   const library=$('#documentLibrary');
   if(!documents.length){const empty=document.createElement('p');empty.className='status muted';empty.textContent='No documents saved yet.';library.replaceChildren(empty);return;}
-  library.replaceChildren(...documents.map(document=>{
+  library.replaceChildren(...documents.map(item=>{
     const card=document.createElement('article');card.className='library-card';
     const copy=document.createElement('div'),kind=document.createElement('span'),name=document.createElement('strong'),meta=document.createElement('small');
-    kind.className='eyebrow';kind.textContent=labels[document.kind]||'Document';name.textContent=document.originalName;meta.textContent=`${Math.max(1,Math.round(document.byteSize/1024))} KB`;
+    kind.className='eyebrow';kind.textContent=labels[item.kind]||'Document';name.textContent=item.originalName;meta.textContent=`${Math.max(1,Math.round(item.byteSize/1024))} KB`;
     copy.append(kind,name,meta);
-    const link=document.createElement('a');link.className='button-link secondary';link.href=document.downloadUrl;link.target='_blank';link.rel='noopener';link.textContent='Open';
+    const link=document.createElement('a');link.className='button-link secondary';link.href=item.downloadUrl;link.target='_blank';link.rel='noopener';link.textContent='Open';
     card.append(copy,link);return card;
   }));
 }

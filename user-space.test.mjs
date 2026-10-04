@@ -103,9 +103,13 @@ test('protected Alex assets are copied into private storage once and source file
 });
 
 test('document and skill panels render account assets and mobile admin actions stack', async () => {
-  const client=await readFile(new URL('./user-space.js',import.meta.url),'utf8'),css=await readFile(new URL('./user-space.css',import.meta.url),'utf8');
-  assert.match(client,/function renderDocuments/);assert.match(client,/function renderSkills/);assert.match(client,/document\.downloadUrl/);
+  const client=await readFile(new URL('./user-space.js',import.meta.url),'utf8'),css=await readFile(new URL('./user-space.css',import.meta.url),'utf8'),html=await readFile(new URL('./user-space.html',import.meta.url),'utf8'),worker=await readFile(new URL('./service-worker.js',import.meta.url),'utf8');
+  assert.match(client,/function renderDocuments/);assert.match(client,/function renderSkills/);assert.match(client,/item\.downloadUrl/);
+  assert.doesNotMatch(client,/documents\.map\(document=>/);
+  assert.ok(client.indexOf('renderApplicationProfile(data.applicationProfile')<client.indexOf('renderDocuments(data.documents'));
   assert.match(css,/\.admin-user \.account-actions\{grid-template-columns:1fr\}/);
+  assert.match(html,/user-space\.js\?v=35/);assert.match(html,/user-space\.css\?v=35/);
+  assert.match(worker,/alex-job-shell-v35-account-library/);assert.match(worker,/url\.pathname\.startsWith\("\/api\/"\)/);assert.match(worker,/url\.pathname\.startsWith\("\/user-space"\)/);
 });
 
 test('mobile shell uses stable short controls and updates do not force open pages home', async () => {
