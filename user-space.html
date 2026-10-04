@@ -43,6 +43,8 @@
 
       <section class="workspace-launcher grid" aria-label="Workspace tools">
         <button class="feature-button" type="button" data-dialog="accountDialog"><strong>Account</strong><span>Details and password</span></button>
+        <button class="feature-button" type="button" data-dialog="documentsDialog"><strong>Documents</strong><span>CVs, letters, and certificates</span></button>
+        <button class="feature-button" type="button" data-dialog="skillsDialog"><strong>Skills</strong><span>Verified evidence and learning</span></button>
         <button class="feature-button" type="button" data-dialog="resumeDialog"><strong>Resume</strong><span>Upload source file</span></button>
         <button class="feature-button" type="button" data-dialog="atsDialog"><strong>ATS draft</strong><span>Create clean base</span></button>
         <button class="feature-button" type="button" data-dialog="tailorDialog"><strong>Tailor CV</strong><span>Use a job description</span></button>
@@ -56,6 +58,18 @@
             <form id="accountDetailsForm"><label>Display name<input name="displayName" autocomplete="name" required minlength="2" maxlength="100"></label><button type="submit">Save details</button></form>
             <form id="passwordForm"><label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label><label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label><label>Retype new password<input name="confirmNewPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label><p class="hint">Changing your password signs out every other session.</p><button type="submit">Change password</button></form>
           </div>
+        </div>
+      </dialog>
+
+      <dialog id="documentsDialog" class="workspace-dialog workspace-dialog-wide">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">PRIVATE LIBRARY</span><h2>My documents</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><p>Your saved CVs, cover letters, and certificates. Each file is isolated to your account.</p><div id="documentLibrary" class="document-library"></div></div>
+        </div>
+      </dialog>
+
+      <dialog id="skillsDialog" class="workspace-dialog workspace-dialog-wide">
+        <div class="dialog-shell"><header class="dialog-head"><div><span class="eyebrow">EVIDENCE</span><h2>My skills</h2></div><button class="secondary" type="button" data-close-dialog>Close</button></header>
+          <div class="dialog-body"><p>Verified skills are kept separate from learning and familiarity items, so the app never turns learning into a claim.</p><div id="skillsLibrary" class="skills-library"></div></div>
         </div>
       </dialog>
 

@@ -17,6 +17,7 @@ const COOKIE_HTTP = 'alex_job_session';
 const COOKIE_HTTPS = '__Host-alex_job_session';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const ALLOWED_EXTENSIONS = new Set(['.pdf', '.txt']);
+const LIBRARY_KINDS = new Set(['resume_de','resume_en','cover_letter_de','cover_letter_en','zeugnisse']);
 const nowIso = () => new Date().toISOString();
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 
@@ -330,10 +331,10 @@ function publicUser(row) {
 }
 
 function publicDocument(row) {
-  return row ? { id:row.id, kind:row.kind, originalName:row.original_name, mimeType:row.mime_type, byteSize:row.byte_size, sha256:row.sha256, createdAt:row.created_at, extractedCharacters:String(row.extracted_text || '').length } : null;
+  return row ? { id:row.id, kind:row.kind, originalName:row.original_name, mimeType:row.mime_type, byteSize:row.byte_size, sha256:row.sha256, createdAt:row.created_at, extractedCharacters:String(row.extracted_text || '').length, downloadUrl:`/api/user-space/documents/${row.id}` } : null;
 }
 
-export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null }) {
+export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json') }) {
   const db = openUserSpaceDatabase(databasePath);
   if(protectedAdminProfile) {
     const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
@@ -345,6 +346,50 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
   }
   const attempts = new Map();
   const dummyPasswordHash = hashPassword('constant-time-placeholder-password-2026');
+
+  function protectedAdminId() {
+    return db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value||'';
+  }
+
+  function documentsFor(userId) {
+    return db.prepare(`SELECT * FROM documents WHERE user_id=? ORDER BY CASE kind WHEN 'initial_resume' THEN 0 WHEN 'resume_de' THEN 1 WHEN 'resume_en' THEN 2 WHEN 'cover_letter_de' THEN 3 WHEN 'cover_letter_en' THEN 4 WHEN 'zeugnisse' THEN 5 ELSE 6 END,created_at DESC`).all(userId).map(publicDocument);
+  }
+
+  function skillsFor(userId) {
+    if(!protectedAdminProfile || userId!==protectedAdminId()) return [];
+    const verified=(protectedAdminProfile.skills||[]).map(group=>({id:group.id,label:group.label,items:group.items||[],classification:'verified'}));
+    const learning=(protectedAdminProfile.familiarities||[]).map(group=>({id:group.id,label:{de:String(group.id||'Lernen').replace(/-/g,' '),en:String(group.id||'Learning').replace(/-/g,' ')},items:[group.en||group.de].filter(Boolean),classification:'learning',restriction:group.restriction||null}));
+    return [...verified,...learning];
+  }
+
+  async function seedProtectedAdminDocuments() {
+    const userId=protectedAdminId();
+    if(!userId || !existsSync(protectedAdminDocumentsPath)) return {imported:0,error:''};
+    const config=JSON.parse(await readFile(protectedAdminDocumentsPath,'utf8'));
+    let imported=0;
+    for(const item of Array.isArray(config.documents)?config.documents:[]) {
+      const kind=String(item.kind||'');
+      if(!LIBRARY_KINDS.has(kind)) throw new Error(`Unsupported protected document kind: ${kind}`);
+      const sourcePath=String(item.path||'');
+      if(!sourcePath || !existsSync(sourcePath)) throw new Error(`Protected document is unavailable: ${basename(sourcePath||'unknown')}`);
+      const extension=extname(sourcePath).toLowerCase();
+      if(!ALLOWED_EXTENSIONS.has(extension)) throw new Error(`Unsupported protected document type: ${extension}`);
+      const buffer=await readFile(sourcePath),digest=sha256(buffer);
+      if(db.prepare('SELECT id FROM documents WHERE user_id=? AND kind=? AND sha256=?').get(userId,kind,digest)) continue;
+      const id=randomUUID(),userDirectory=join(storageRoot,userId,'library');
+      await mkdir(userDirectory,{recursive:true});
+      const storedPath=join(userDirectory,`${id}${extension}`);
+      await writeFile(storedPath,buffer,{flag:'wx'});
+      const extractedText=kind.startsWith('resume_')?await extractResumeText(buffer,extension):'';
+      const originalName=basename(String(item.label||basename(sourcePath))).slice(0,180);
+      db.prepare(`INSERT INTO documents(id,user_id,kind,original_name,stored_path,mime_type,byte_size,sha256,extracted_text,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(id,userId,kind,originalName,storedPath,extension==='.pdf'?'application/pdf':'text/plain',buffer.length,digest,extractedText,nowIso());
+      imported++;
+    }
+    if(imported) recordSecurity(userId,'protected_documents_imported');
+    return {imported,error:''};
+  }
+
+  const protectedAssetsReady=seedProtectedAdminDocuments().catch(error=>({imported:0,error:error.message}));
   const staticFiles = new Map([
     ['/', ['user-space.html', 'text/html; charset=utf-8']],
     ['/user-space', ['user-space.html', 'text/html; charset=utf-8']],
@@ -479,7 +524,15 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
   }
 
   function latestResume(userId) {
-    return db.prepare("SELECT * FROM documents WHERE user_id=? AND kind='initial_resume' ORDER BY created_at DESC LIMIT 1").get(userId);
+    return db.prepare("SELECT * FROM documents WHERE user_id=? AND kind IN ('initial_resume','resume_de','resume_en') ORDER BY CASE kind WHEN 'initial_resume' THEN 0 WHEN 'resume_de' THEN 1 ELSE 2 END,created_at DESC LIMIT 1").get(userId);
+  }
+
+  async function downloadDocument(req,res,id) {
+    const session=requireSession(req),row=db.prepare('SELECT * FROM documents WHERE id=? AND user_id=?').get(id,session.row.user_id);
+    if(!row) throw httpError(404,'Document not found.','DOCUMENT_NOT_FOUND');
+    const content=await readFile(row.stored_path);
+    res.writeHead(200,securityHeaders({'content-type':row.mime_type,'content-length':String(content.length),'content-disposition':`inline; filename="${basename(row.original_name).replace(/["\r\n]/g,'')}"`}));
+    res.end(content);
   }
 
   function profileFor(userId) {
@@ -557,7 +610,8 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     sendJson(res, 201, { ok:true, draft:{ id:draft.id, mode:draft.mode, createdAt:draft.created_at, sourceDocumentId:source.id, ...result } });
   }
 
-  function adminUsers(req,res) {
+  async function adminUsers(req,res) {
+    await protectedAssetsReady;
     requireAdmin(req);
     const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value||'';
     const users=db.prepare(`SELECT u.id,u.username,u.display_name,u.role,u.created_at,u.updated_at,u.disabled_at,
@@ -615,16 +669,19 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         recordSecurity(session.row.user_id, 'logout');
         sendJson(res, 200, { ok:true }, { 'set-cookie':clearCookies() });
       } else if (url.pathname === '/api/user-space/session' && req.method === 'GET') {
+        const assets=await protectedAssetsReady;
         const session = rawSession(req);
         if (!session) sendJson(res, 200, { authenticated:false });
-        else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), applicationProfile:profileFor(session.row.user_id) });
+        else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), documents:documentsFor(session.row.user_id), skills:skillsFor(session.row.user_id), libraryError:session.row.user_id===protectedAdminId()?assets.error:'', applicationProfile:profileFor(session.row.user_id) });
+      } else if (url.pathname.startsWith('/api/user-space/documents/') && req.method === 'GET') {
+        await downloadDocument(req,res,decodeURIComponent(url.pathname.slice('/api/user-space/documents/'.length)));
       } else if (url.pathname === '/api/user-space/resume' && req.method === 'POST') await uploadResume(req, res);
       else if (url.pathname === '/api/user-space/account' && req.method === 'PUT') await updateAccount(req,res);
       else if (url.pathname === '/api/user-space/password' && req.method === 'PUT') await changePassword(req,res);
       else if (url.pathname === '/api/user-space/refine' && req.method === 'POST') await refine(req, res);
       else if (url.pathname === '/api/user-space/application-profile' && req.method === 'PUT') await saveProfile(req,res);
       else if (url.pathname === '/api/user-space/chrome-extension' && req.method === 'POST') await exportExtension(req,res);
-      else if (url.pathname === '/api/user-space/admin/users' && req.method === 'GET') adminUsers(req,res);
+      else if (url.pathname === '/api/user-space/admin/users' && req.method === 'GET') await adminUsers(req,res);
       else if (url.pathname === '/api/user-space/admin/users' && req.method === 'PATCH') await manageUser(req,res);
       else throw httpError(404, 'User-space endpoint not found.', 'NOT_FOUND');
     } catch (error) {
@@ -633,5 +690,5 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return true;
   }
 
-  return { handle, extensionContext, db, close:() => db.close() };
+  return { handle, extensionContext, db, ready:protectedAssetsReady, close:() => db.close() };
 }

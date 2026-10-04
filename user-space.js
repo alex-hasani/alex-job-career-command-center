@@ -49,7 +49,10 @@ function setAuthenticated(data) {
   $('#accountName').textContent = `${data.user.displayName} · ${data.user.username}`;
   $('#accountDetailsForm').elements.displayName.value=data.user.displayName||'';
   renderResume(data.resume || null);
+  renderDocuments(data.documents || []);
+  renderSkills(data.skills || []);
   renderApplicationProfile(data.applicationProfile || {});
+  if (data.libraryError) showMessage(`Document library could not be loaded: ${data.libraryError}`, true);
   const isAdmin=data.user.role==='global_admin';
   $('#adminPanel').classList.toggle('hidden',!isAdmin);
   if(isAdmin) void loadAdminUsers();
@@ -72,6 +75,32 @@ function renderResume(document) {
   }
   status.textContent = `${document.originalName} · ${Math.round(document.byteSize / 1024)} KB · ${document.extractedCharacters} extracted characters`;
   status.className = 'status ready';
+}
+
+function renderDocuments(documents) {
+  const labels={initial_resume:'Uploaded resume',resume_de:'CV · German',resume_en:'CV · English',cover_letter_de:'Cover letter · German',cover_letter_en:'Cover letter · English',zeugnisse:'Zeugnisse'};
+  const library=$('#documentLibrary');
+  if(!documents.length){const empty=document.createElement('p');empty.className='status muted';empty.textContent='No documents saved yet.';library.replaceChildren(empty);return;}
+  library.replaceChildren(...documents.map(document=>{
+    const card=document.createElement('article');card.className='library-card';
+    const copy=document.createElement('div'),kind=document.createElement('span'),name=document.createElement('strong'),meta=document.createElement('small');
+    kind.className='eyebrow';kind.textContent=labels[document.kind]||'Document';name.textContent=document.originalName;meta.textContent=`${Math.max(1,Math.round(document.byteSize/1024))} KB`;
+    copy.append(kind,name,meta);
+    const link=document.createElement('a');link.className='button-link secondary';link.href=document.downloadUrl;link.target='_blank';link.rel='noopener';link.textContent='Open';
+    card.append(copy,link);return card;
+  }));
+}
+
+function renderSkills(groups) {
+  const library=$('#skillsLibrary');
+  if(!groups.length){const empty=document.createElement('p');empty.className='status muted';empty.textContent='No skills saved yet.';library.replaceChildren(empty);return;}
+  library.replaceChildren(...groups.map(group=>{
+    const card=document.createElement('article');card.className='skill-card';
+    const head=document.createElement('div'),title=document.createElement('h3'),badge=document.createElement('span');
+    title.textContent=group.label?.en||group.label?.de||'Skills';badge.className='badge';badge.textContent=group.classification==='verified'?'Verified':'Learning';head.append(title,badge);
+    const list=document.createElement('ul');for(const item of group.items||[]){const li=document.createElement('li');li.textContent=item;list.append(li);}
+    card.append(head,list);return card;
+  }));
 }
 
 function renderApplicationProfile(profile) {
@@ -157,6 +186,7 @@ $('#uploadButton').addEventListener('click', async () => {
   try {
     const data = await api('/api/user-space/resume', { method:'POST', headers:{ 'content-type':file.type || 'application/octet-stream', 'x-file-name':encodeURIComponent(file.name) }, body:file });
     renderResume(data.document);
+    const refreshed=await api('/api/user-space/session');renderDocuments(refreshed.documents||[]);
     showMessage(data.duplicate ? 'This exact resume was already stored; no duplicate was created.' : 'Source resume uploaded and isolated to your account.');
   } catch (error) { showMessage(error.message, true); }
   finally { button.disabled = false; }

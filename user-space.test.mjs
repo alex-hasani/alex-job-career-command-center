@@ -76,6 +76,36 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /name="birthDate"/);
   assert.match(html, /data-dialog="helperDialog"/);
   assert.match(html, /id="helperDialog" class="workspace-dialog workspace-dialog-wide"/);
+  assert.match(html, /data-dialog="documentsDialog"/);
+  assert.match(html, /id="documentLibrary"/);
+  assert.match(html, /data-dialog="skillsDialog"/);
+  assert.match(html, /id="skillsLibrary"/);
+});
+
+test('protected Alex assets are copied into private storage once and source files stay unchanged', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'alex-job-protected-assets-')),databasePath=join(directory,'users.sqlite'),storageRoot=join(directory,'storage');
+  const resumePath=join(directory,'Alex_Hasani_CV_DE.txt'),letterPath=join(directory,'Alex_Hasani_Anschreiben_DE.txt'),configPath=join(directory,'admin-documents.json');
+  const resume='Alex Hasani\nInfrastructure Engineer\nWindows Server and Azure\n',letter='Application letter source evidence\n';
+  await writeFile(resumePath,resume);await writeFile(letterPath,letter);
+  await writeFile(configPath,JSON.stringify({documents:[{kind:'resume_de',label:'Alex_Hasani_CV_DE.txt',path:resumePath},{kind:'cover_letter_de',label:'Alex_Hasani_Anschreiben_DE.txt',path:letterPath}]}));
+  let db=openUserSpaceDatabase(databasePath),createdAt='2026-10-04T00:00:00.000Z';
+  db.prepare('INSERT INTO users(id,username,display_name,role,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run('alex-id','alex','Alex','global_admin','hash',createdAt,createdAt);
+  db.prepare("INSERT OR REPLACE INTO user_space_settings(key,value,updated_at) VALUES('global_admin_user_id','alex-id',?)").run(createdAt);db.close();
+  const profile={identity:{email:'alex@example.com',phone:'+49 123',workAuthorisation:{de:'Ja',en:'Yes'}},applicationForm:{firstName:'Alex',legalFirstName:'Mohsen',lastName:'Hasani'},skills:[{id:'cloud',label:{de:'Cloud',en:'Cloud'},items:['Azure']}],familiarities:[{id:'terraform',de:'Terraform Grundlagen',en:'Terraform foundations',restriction:{en:'No production claim.'}}]};
+  const router=createUserSpaceRouter({root:directory,workspace:directory,databasePath,storageRoot,protectedAdminDocumentsPath:configPath,protectedAdminProfile:profile});
+  try {
+    const result=await router.ready;assert.equal(result.error,'');assert.equal(result.imported,2);
+    const documents=router.db.prepare('SELECT kind,original_name,stored_path FROM documents ORDER BY kind').all();
+    assert.deepEqual(documents.map(row=>row.kind),['cover_letter_de','resume_de']);
+    assert.equal(documents.every(row=>row.stored_path.startsWith(storageRoot)),true);
+    assert.equal(await readFile(resumePath,'utf8'),resume);assert.equal(await readFile(letterPath,'utf8'),letter);
+  } finally {router.close();await rm(directory,{recursive:true,force:true});}
+});
+
+test('document and skill panels render account assets and mobile admin actions stack', async () => {
+  const client=await readFile(new URL('./user-space.js',import.meta.url),'utf8'),css=await readFile(new URL('./user-space.css',import.meta.url),'utf8');
+  assert.match(client,/function renderDocuments/);assert.match(client,/function renderSkills/);assert.match(client,/document\.downloadUrl/);
+  assert.match(css,/\.admin-user \.account-actions\{grid-template-columns:1fr\}/);
 });
 
 test('mobile shell uses stable short controls and updates do not force open pages home', async () => {
@@ -101,10 +131,10 @@ test('password changes require confirmation and system messages use the top dial
 });
 
 test('canonical profile mapping includes the complete application defaults without invention', () => {
-  const profile=profileFromCanonical({identity:{email:'candidate@example.com',phone:'+1 555 0100',workAuthorisation:{de:'Ja',en:'Yes'}},applicationForm:{firstName:'Taylor',legalFirstName:'Avery',lastName:'Example',birthDate:'1990-01-15',euWorkPermit:{de:'Ja',en:'Yes'},commute:{de:'Pendeln',en:'Commute'},desiredSalaryAnnualEur:75000}});
-  assert.equal(profile.firstName,'Taylor');
-  assert.equal(profile.legalFirstName,'Avery');
-  assert.equal(profile.birthDate,'1990-01-15');
+  const profile=profileFromCanonical({identity:{email:'alex@example.com',phone:'+49 123',workAuthorisation:{de:'Ja',en:'Yes'}},applicationForm:{firstName:'Alex',legalFirstName:'Mohsen',lastName:'Hasani',birthDate:'1986-07-03',euWorkPermit:{de:'Ja',en:'Yes'},commute:{de:'Pendeln',en:'Commute'},desiredSalaryAnnualEur:75000}});
+  assert.equal(profile.firstName,'Alex');
+  assert.equal(profile.legalFirstName,'Mohsen');
+  assert.equal(profile.birthDate,'1986-07-03');
   assert.equal(profile.euWorkPermitEn,'Yes');
   assert.equal(profile.commuteDe,'Pendeln');
   assert.equal(profile.desiredSalaryAnnualEur,'75000');
