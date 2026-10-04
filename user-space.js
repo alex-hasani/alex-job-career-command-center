@@ -24,6 +24,7 @@ function setAuthenticated(data) {
   $('#authPanel').classList.add('hidden');
   $('#workspacePanel').classList.remove('hidden');
   $('#accountName').textContent = `${data.user.displayName} · ${data.user.username}`;
+  $('#accountDetailsForm').elements.displayName.value=data.user.displayName||'';
   renderResume(data.resume || null);
   renderApplicationProfile(data.applicationProfile || {});
   const isAdmin=data.user.role==='global_admin';
@@ -60,15 +61,17 @@ async function loadAdminUsers() {
     const row=document.createElement('article');row.className='admin-user';
     const summary=document.createElement('div');summary.innerHTML=`<strong></strong><span></span>`;summary.querySelector('strong').textContent=`${user.displayName} · ${user.username}`;summary.querySelector('span').textContent=`${user.role} · ${user.disabledAt?'disabled':'active'} · ${user.activeSessions} session(s) · ${user.documentCount} document(s)`;
     const actions=document.createElement('div');actions.className='account-actions';
-    const choices=user.protectedGlobalAdmin?['revoke_sessions']:user.disabledAt?['enable','make_admin','make_user','revoke_sessions']:['disable','make_admin','make_user','revoke_sessions'];
-    const labels={disable:'Disable',enable:'Enable',make_admin:'Make admin',make_user:'Make user',revoke_sessions:'Sign out everywhere'};
+    const choices=user.protectedGlobalAdmin?['reset_password','revoke_sessions']:user.disabledAt?['enable','make_admin','make_user','reset_password','revoke_sessions']:['disable','make_admin','make_user','reset_password','revoke_sessions'];
+    const labels={disable:'Disable',enable:'Enable',make_admin:'Make admin',make_user:'Make user',reset_password:'Reset password',revoke_sessions:'Sign out everywhere'};
     for(const action of choices){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=labels[action];button.onclick=()=>manageUser(user.id,action);actions.append(button);}
     row.append(summary,actions);return row;
   }));
 }
 
 async function manageUser(userId,action) {
-  try { await api('/api/user-space/admin/users',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({userId,action})});await loadAdminUsers();showMessage('User access updated.'); }
+  const body={userId,action};
+  if(action==='reset_password') { const value=prompt('Enter a temporary password of at least 12 characters. The user will be signed out everywhere.'); if(value===null)return; body.newPassword=value; }
+  try { await api('/api/user-space/admin/users',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});await loadAdminUsers();showMessage(action==='reset_password'?'Password reset. Share the temporary password securely.':'User access updated.'); }
   catch(error){showMessage(error.message,true);}
 }
 
@@ -111,6 +114,16 @@ $('#registerForm').addEventListener('submit', event => { event.preventDefault();
 $('#logoutButton').addEventListener('click', async () => {
   try { await api('/api/user-space/logout', { method:'POST' }); } catch {}
   setSignedOut();
+});
+$('#accountDetailsForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
+  try { const data=await api('/api/user-space/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries()))});$('#accountName').textContent=`${data.user.displayName} · ${data.user.username}`;showMessage('Account details saved.'); }
+  catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
+});
+$('#passwordForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
+  try { await api('/api/user-space/password',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries()))});event.currentTarget.reset();showMessage('Password changed. Other sessions were signed out.'); }
+  catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#uploadButton').addEventListener('click', async () => {
   const file = $('#resumeFile').files[0];
@@ -156,6 +169,7 @@ async function verifySession({initial=false}={}) {
   return false;
 }
 void verifySession({initial:true});
+if(location.pathname.startsWith('/profile')) window.addEventListener('load',()=>$('#accountProfilePanel').scrollIntoView({block:'start'}),{once:true});
 setInterval(()=>void verifySession(),5000);
 window.addEventListener('focus',()=>void verifySession());
 window.addEventListener('pageshow',()=>void verifySession());

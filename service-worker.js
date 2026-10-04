@@ -1,4 +1,4 @@
-const CACHE = "alex-job-shell-v32-force-login";
+const CACHE = "alex-job-shell-v33-profile-and-dashboard";
 const SHELL = ["/", "/index.html", "/filter-logic.js", "/manifest.webmanifest", "/app-icon.svg"];
 
 self.addEventListener("install", event => {

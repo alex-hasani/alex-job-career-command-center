@@ -20,7 +20,7 @@ const ALLOWED_EXTENSIONS = new Set(['.pdf', '.txt']);
 const nowIso = () => new Date().toISOString();
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 
-const PROFILE_FIELDS = ['firstName','legalFirstName','lastName','email','phone','street','houseNumber','postalCode','city','countryDe','countryEn','nationalityDe','nationalityEn','salutationDe','salutationEn','workAuthorisationDe','workAuthorisationEn','desiredSalaryAnnualEur','weeklyHoursMin','weeklyHoursMax','germanLevel','englishLevel'];
+const PROFILE_FIELDS = ['firstName','legalFirstName','lastName','email','phone','phoneNational','phoneSubscriber','street','houseNumber','postalCode','city','countryDe','countryEn','nationalityDe','nationalityEn','salutationDe','salutationEn','workAuthorisationDe','workAuthorisationEn','birthDate','highestQualificationDe','highestQualificationEn','drivingLicence','relocationDe','relocationEn','businessTravelDe','businessTravelEn','sponsorshipRequiredDe','sponsorshipRequiredEn','residencePermitDe','residencePermitEn','euWorkPermitDe','euWorkPermitEn','desiredSalaryAnnualEur','weeklyHoursMin','weeklyHoursMax','commuteDe','commuteEn','salaryNegotiableDe','salaryNegotiableEn','germanLevel','englishLevel','startAvailabilityDe','startAvailabilityEn'];
 
 function cleanProfile(input={}) {
   const profile={};
@@ -33,7 +33,12 @@ function cleanProfile(input={}) {
 function applicationProfile(profile) {
   const p=cleanProfile(profile);
   const location=[p.postalCode,p.city,p.countryEn||p.countryDe].filter(Boolean).join(', ');
-  return {identity:{name:[p.firstName,p.lastName].filter(Boolean).join(' '),email:p.email,phone:p.phone,location,linkedin:'',github:'',workAuthorisation:{de:p.workAuthorisationDe,en:p.workAuthorisationEn}},applicationForm:{firstName:p.firstName,legalFirstName:p.legalFirstName||p.firstName,lastName:p.lastName,salutation:{de:p.salutationDe,en:p.salutationEn},nationality:{de:p.nationalityDe,en:p.nationalityEn},phoneInternational:p.phone,address:[p.street,p.houseNumber,p.postalCode,p.city].filter(Boolean).join(' '),street:p.street,houseNumber:p.houseNumber,postalCode:p.postalCode,city:p.city,country:{de:p.countryDe,en:p.countryEn},desiredSalaryAnnualEur:p.desiredSalaryAnnualEur,weeklyHoursMin:p.weeklyHoursMin,weeklyHoursMax:p.weeklyHoursMax,germanLevel:p.germanLevel,englishLevel:p.englishLevel}};
+  return {identity:{name:[p.firstName,p.lastName].filter(Boolean).join(' '),email:p.email,phone:p.phone,location,linkedin:'',github:'',workAuthorisation:{de:p.workAuthorisationDe,en:p.workAuthorisationEn}},applicationForm:{firstName:p.firstName,preferredName:p.firstName,legalFirstName:p.legalFirstName||p.firstName,lastName:p.lastName,salutation:{de:p.salutationDe,en:p.salutationEn},nationality:{de:p.nationalityDe,en:p.nationalityEn},birthDate:p.birthDate,phoneInternational:p.phone,phoneNational:p.phoneNational,phoneSubscriber:p.phoneSubscriber,address:[p.street,p.houseNumber,p.postalCode,p.city].filter(Boolean).join(' '),street:p.street,houseNumber:p.houseNumber,postalCode:p.postalCode,city:p.city,country:{de:p.countryDe,en:p.countryEn},highestQualification:{de:p.highestQualificationDe,en:p.highestQualificationEn},drivingLicence:p.drivingLicence,relocation:{de:p.relocationDe,en:p.relocationEn},businessTravel:{de:p.businessTravelDe,en:p.businessTravelEn},sponsorshipRequired:{de:p.sponsorshipRequiredDe,en:p.sponsorshipRequiredEn},residencePermit:{de:p.residencePermitDe,en:p.residencePermitEn},euWorkPermit:{de:p.euWorkPermitDe,en:p.euWorkPermitEn},desiredSalaryAnnualEur:p.desiredSalaryAnnualEur,weeklyHoursMin:p.weeklyHoursMin,weeklyHoursMax:p.weeklyHoursMax,commute:{de:p.commuteDe,en:p.commuteEn},salaryNegotiable:{de:p.salaryNegotiableDe,en:p.salaryNegotiableEn},germanLevel:p.germanLevel,englishLevel:p.englishLevel,startAvailability:{de:p.startAvailabilityDe,en:p.startAvailabilityEn}}};
+}
+
+export function profileFromCanonical(source={}) {
+  const form=source.applicationForm||{},identity=source.identity||{};
+  return cleanProfile({firstName:form.firstName,legalFirstName:form.legalFirstName,lastName:form.lastName,email:identity.email,phone:form.phoneInternational||identity.phone,phoneNational:form.phoneNational,phoneSubscriber:form.phoneSubscriber,street:form.street,houseNumber:form.houseNumber,postalCode:form.postalCode,city:form.city,countryDe:form.country?.de,countryEn:form.country?.en,nationalityDe:form.nationality?.de,nationalityEn:form.nationality?.en,salutationDe:form.salutation?.de,salutationEn:form.salutation?.en,workAuthorisationDe:identity.workAuthorisation?.de,workAuthorisationEn:identity.workAuthorisation?.en,birthDate:form.birthDate,highestQualificationDe:form.highestQualification?.de,highestQualificationEn:form.highestQualification?.en,drivingLicence:form.drivingLicence,relocationDe:form.relocation?.de,relocationEn:form.relocation?.en,businessTravelDe:form.businessTravel?.de,businessTravelEn:form.businessTravel?.en,sponsorshipRequiredDe:form.sponsorshipRequired?.de,sponsorshipRequiredEn:form.sponsorshipRequired?.en,residencePermitDe:form.residencePermit?.de,residencePermitEn:form.residencePermit?.en,euWorkPermitDe:form.euWorkPermit?.de,euWorkPermitEn:form.euWorkPermit?.en,desiredSalaryAnnualEur:form.desiredSalaryAnnualEur,weeklyHoursMin:form.weeklyHoursMin,weeklyHoursMax:form.weeklyHoursMax,commuteDe:form.commute?.de,commuteEn:form.commute?.en,salaryNegotiableDe:form.salaryNegotiable?.de,salaryNegotiableEn:form.salaryNegotiable?.en,germanLevel:form.germanLevel,englishLevel:form.englishLevel,startAvailabilityDe:form.startAvailability?.de,startAvailabilityEn:form.startAvailability?.en});
 }
 
 function crc32(buffer) {
@@ -328,14 +333,24 @@ function publicDocument(row) {
   return row ? { id:row.id, kind:row.kind, originalName:row.original_name, mimeType:row.mime_type, byteSize:row.byte_size, sha256:row.sha256, createdAt:row.created_at, extractedCharacters:String(row.extracted_text || '').length } : null;
 }
 
-export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files') }) {
+export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null }) {
   const db = openUserSpaceDatabase(databasePath);
+  if(protectedAdminProfile) {
+    const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
+    if(protectedAdminId) {
+      const seeded=profileFromCanonical(protectedAdminProfile),row=db.prepare('SELECT profile_json FROM application_profiles WHERE user_id=?').get(protectedAdminId);
+      const current=row?JSON.parse(row.profile_json):{},merged={...seeded,...Object.fromEntries(Object.entries(current).filter(([,value])=>String(value||'').trim()))};
+      db.prepare(`INSERT INTO application_profiles(user_id,profile_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at`).run(protectedAdminId,JSON.stringify(merged),nowIso());
+    }
+  }
   const attempts = new Map();
   const dummyPasswordHash = hashPassword('constant-time-placeholder-password-2026');
   const staticFiles = new Map([
     ['/', ['user-space.html', 'text/html; charset=utf-8']],
     ['/user-space', ['user-space.html', 'text/html; charset=utf-8']],
     ['/user-space/', ['user-space.html', 'text/html; charset=utf-8']],
+    ['/profile', ['user-space.html', 'text/html; charset=utf-8']],
+    ['/profile/', ['user-space.html', 'text/html; charset=utf-8']],
     ['/dashboard', ['index.html', 'text/html; charset=utf-8']],
     ['/index.html', ['index.html', 'text/html; charset=utf-8']],
     ['/user-space.js', ['user-space.js', 'text/javascript; charset=utf-8']],
@@ -481,6 +496,24 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     sendJson(res,200,{ok:true,applicationProfile:profile});
   }
 
+  async function updateAccount(req,res) {
+    const session=requireSession(req,{csrf:true}),input=await readJson(req),displayName=String(input.displayName||'').replace(/\s+/g,' ').trim().slice(0,100);
+    if(displayName.length<2) throw httpError(400,'Display name must contain at least two characters.','INVALID_DISPLAY_NAME');
+    db.prepare('UPDATE users SET display_name=?,updated_at=? WHERE id=?').run(displayName,nowIso(),session.row.user_id);
+    recordSecurity(session.row.user_id,'account_details_updated');
+    sendJson(res,200,{ok:true,user:publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(session.row.user_id))});
+  }
+
+  async function changePassword(req,res) {
+    const session=requireSession(req,{csrf:true}),input=await readJson(req),currentPassword=String(input.currentPassword||''),newPassword=validatePassword(input.newPassword);
+    const user=db.prepare('SELECT * FROM users WHERE id=?').get(session.row.user_id);
+    if(!await verifyPassword(currentPassword,user.password_hash)) throw httpError(403,'Current password is incorrect.','PASSWORD_INCORRECT');
+    db.prepare('UPDATE users SET password_hash=?,updated_at=? WHERE id=?').run(await hashPassword(newPassword),nowIso(),user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id=? AND token_hash<>?').run(user.id,session.tokenHash);
+    recordSecurity(user.id,'password_changed');
+    sendJson(res,200,{ok:true});
+  }
+
   async function exportExtension(req,res) {
     const session=requireSession(req,{csrf:true});
     const profile=profileFor(session.row.user_id),resume=latestResume(session.row.user_id);
@@ -545,6 +578,11 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     else if(action==='make_admin') db.prepare("UPDATE users SET role='global_admin',updated_at=? WHERE id=?").run(nowIso(),userId);
     else if(action==='make_user') db.prepare("UPDATE users SET role='user',updated_at=? WHERE id=?").run(nowIso(),userId);
     else if(action==='revoke_sessions') db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
+    else if(action==='reset_password') {
+      const newPassword=validatePassword(input.newPassword);
+      db.prepare('UPDATE users SET password_hash=?,updated_at=? WHERE id=?').run(await hashPassword(newPassword),nowIso(),userId);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
+    }
     else throw httpError(400,'Unsupported user-management action.','INVALID_ADMIN_ACTION');
     recordSecurity(admin.row.user_id,`admin_${action}`);
     sendJson(res,200,{ok:true,user:publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(userId))});
@@ -560,7 +598,8 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
       }
       const [name, contentType] = staticEntry;
       const content = await readFile(join(root, name));
-      res.writeHead(200, securityHeaders({ 'content-type':contentType }));
+      const dashboardPolicy=(url.pathname==='/dashboard'||url.pathname==='/index.html')?"default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'":null;
+      res.writeHead(200, securityHeaders({ 'content-type':contentType, ...(dashboardPolicy?{'content-security-policy':dashboardPolicy}:{}) }));
       res.end(content);
       return true;
     }
@@ -579,6 +618,8 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         if (!session) sendJson(res, 200, { authenticated:false });
         else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), applicationProfile:profileFor(session.row.user_id) });
       } else if (url.pathname === '/api/user-space/resume' && req.method === 'POST') await uploadResume(req, res);
+      else if (url.pathname === '/api/user-space/account' && req.method === 'PUT') await updateAccount(req,res);
+      else if (url.pathname === '/api/user-space/password' && req.method === 'PUT') await changePassword(req,res);
       else if (url.pathname === '/api/user-space/refine' && req.method === 'POST') await refine(req, res);
       else if (url.pathname === '/api/user-space/application-profile' && req.method === 'PUT') await saveProfile(req,res);
       else if (url.pathname === '/api/user-space/chrome-extension' && req.method === 'POST') await exportExtension(req,res);

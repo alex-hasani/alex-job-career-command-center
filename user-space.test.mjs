@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, refineResumeEvidence } from './user-space.mjs';
+import { createHash } from 'node:crypto';
+import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, profileFromCanonical, refineResumeEvidence } from './user-space.mjs';
 
 test('passwords use salted scrypt hashes and verify without storing plaintext', async () => {
   const password = 'Correct horse battery staple 2026';
@@ -71,6 +72,18 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /using only your verified skills, experience, and achievements\./);
   assert.match(html, /href="\/dashboard"/);
   assert.match(html, /Global administration/);
+  assert.match(html, /Account and security/);
+  assert.match(html, /name="birthDate"/);
+});
+
+test('canonical profile mapping includes the complete application defaults without invention', () => {
+  const profile=profileFromCanonical({identity:{email:'candidate@example.com',phone:'+1 555 0100',workAuthorisation:{de:'Ja',en:'Yes'}},applicationForm:{firstName:'Taylor',legalFirstName:'Avery',lastName:'Example',birthDate:'1990-01-15',euWorkPermit:{de:'Ja',en:'Yes'},commute:{de:'Pendeln',en:'Commute'},desiredSalaryAnnualEur:75000}});
+  assert.equal(profile.firstName,'Taylor');
+  assert.equal(profile.legalFirstName,'Avery');
+  assert.equal(profile.birthDate,'1990-01-15');
+  assert.equal(profile.euWorkPermitEn,'Yes');
+  assert.equal(profile.commuteDe,'Pendeln');
+  assert.equal(profile.desiredSalaryAnnualEur,'75000');
 });
 
 test('open dashboard pages continuously verify the login session', async () => {
@@ -83,6 +96,8 @@ test('root is the account landing page and the dashboard redirects signed-out vi
   const directory = await mkdtemp(join(tmpdir(), 'alex-job-user-space-routes-'));
   await writeFile(join(directory, 'user-space.html'), '<h1>Account landing</h1>');
   await writeFile(join(directory, 'index.html'), '<h1>Dashboard</h1>');
+  await writeFile(join(directory, 'user-space.js'), '');
+  await writeFile(join(directory, 'user-space.css'), '');
   const router = createUserSpaceRouter({ root:directory, workspace:directory });
   const request = { method:'GET', headers:{}, socket:{} };
   const response = () => ({ status:0, headers:{}, body:'', writeHead(status, headers) { this.status=status; this.headers=headers; }, end(body='') { this.body=String(body); } });
@@ -91,10 +106,31 @@ test('root is the account landing page and the dashboard redirects signed-out vi
     assert.equal(await router.handle(request, landing, new URL('http://127.0.0.1/')), true);
     assert.equal(landing.status, 200);
     assert.match(landing.body, /Account landing/);
+    assert.doesNotMatch(landing.headers['content-security-policy'], /unsafe-inline/);
+
+    const profile = response();
+    assert.equal(await router.handle(request, profile, new URL('http://127.0.0.1/profile')), true);
+    assert.equal(profile.status, 200);
 
     const dashboard = response();
     assert.equal(await router.handle(request, dashboard, new URL('http://127.0.0.1/dashboard')), true);
     assert.equal(dashboard.status, 302);
     assert.equal(dashboard.headers.location, '/');
   } finally { router.close(); await rm(directory, { recursive:true, force:true }); }
+});
+
+test('dashboard keeps its existing inline application UI while login pages retain strict CSP', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'alex-job-dashboard-csp-'));
+  await writeFile(join(directory,'user-space.html'),'<h1>Login</h1>');
+  await writeFile(join(directory,'index.html'),'<style>body{color:red}</style><script>window.ready=true</script>');
+  const router=createUserSpaceRouter({root:directory,workspace:directory}),createdAt='2026-10-04T00:00:00.000Z',token='dashboard-session';
+  router.db.prepare('INSERT INTO users(id,username,display_name,role,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run('user-id','tester','Tester','user','hash',createdAt,createdAt);
+  router.db.prepare('INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)').run(createHash('sha256').update(token).digest('hex'),'user-id','csrf',createdAt,'2099-01-01T00:00:00.000Z',createdAt);
+  const response={status:0,headers:{},body:'',writeHead(status,headers){this.status=status;this.headers=headers;},end(body=''){this.body=String(body);}};
+  try {
+    await router.handle({method:'GET',headers:{cookie:`alex_job_session=${token}`},socket:{}},response,new URL('http://127.0.0.1/dashboard'));
+    assert.equal(response.status,200);
+    assert.match(response.headers['content-security-policy'],/style-src 'self' 'unsafe-inline'/);
+    assert.match(response.headers['content-security-policy'],/script-src 'self' 'unsafe-inline'/);
+  } finally {router.close();await rm(directory,{recursive:true,force:true});}
 });

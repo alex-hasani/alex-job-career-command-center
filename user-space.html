@@ -36,9 +36,26 @@
         <div><span class="eyebrow">SIGNED IN</span><strong id="accountName"></strong></div>
         <div class="account-actions">
           <a class="button-link" href="/dashboard">Open career dashboard</a>
+          <a class="button-link secondary" href="/profile">Profile</a>
           <button id="logoutButton" class="secondary" type="button">Sign out</button>
         </div>
       </div>
+
+      <section id="accountProfilePanel" class="card full">
+        <h2>Account and security</h2>
+        <div class="grid">
+          <form id="accountDetailsForm">
+            <label>Display name<input name="displayName" autocomplete="name" required minlength="2" maxlength="100"></label>
+            <button type="submit">Save account details</button>
+          </form>
+          <form id="passwordForm">
+            <label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required minlength="12" maxlength="128"></label>
+            <label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="128"></label>
+            <p class="hint">Changing your password signs out every other session.</p>
+            <button type="submit">Change password</button>
+          </form>
+        </div>
+      </section>
 
       <div class="grid">
         <section class="card">
@@ -63,7 +80,7 @@
         <p class="hint">Terms that are absent from your resume appear only as review gaps. They are never inserted into the draft.</p>
       </section>
 
-      <section class="card full">
+      <section id="applicationProfilePanel" class="card full">
         <h2>4. Personal Chrome helper</h2>
         <p>Save the application details that belong to this account, then export its own helper. Every export has a distinct Chrome identity, so helpers for different users can be installed side by side.</p>
         <form id="applicationProfileForm" class="grid">
@@ -72,6 +89,8 @@
           <label>Last name<input name="lastName" autocomplete="family-name" required></label>
           <label>Email<input name="email" type="email" autocomplete="email" required></label>
           <label>Phone<input name="phone" autocomplete="tel"></label>
+          <label>Phone (national)<input name="phoneNational" autocomplete="tel-national"></label>
+          <label>Phone (without country prefix)<input name="phoneSubscriber" autocomplete="off"></label>
           <label>Street<input name="street" autocomplete="address-line1"></label>
           <label>House number<input name="houseNumber" autocomplete="off"></label>
           <label>Postal code<input name="postalCode" autocomplete="postal-code"></label>
@@ -84,11 +103,31 @@
           <label>Salutation (English)<input name="salutationEn"></label>
           <label>Work authorisation (German)<input name="workAuthorisationDe"></label>
           <label>Work authorisation (English)<input name="workAuthorisationEn"></label>
+          <label>Date of birth<input name="birthDate" type="date" autocomplete="bday"></label>
+          <label>Highest qualification (German)<input name="highestQualificationDe"></label>
+          <label>Highest qualification (English)<input name="highestQualificationEn"></label>
+          <label>Driving licence<input name="drivingLicence"></label>
+          <label>Relocation (German)<input name="relocationDe"></label>
+          <label>Relocation (English)<input name="relocationEn"></label>
+          <label>Business travel (German)<input name="businessTravelDe"></label>
+          <label>Business travel (English)<input name="businessTravelEn"></label>
+          <label>Sponsorship required (German)<input name="sponsorshipRequiredDe"></label>
+          <label>Sponsorship required (English)<input name="sponsorshipRequiredEn"></label>
+          <label>Residence permit (German)<input name="residencePermitDe"></label>
+          <label>Residence permit (English)<input name="residencePermitEn"></label>
+          <label>EU work permit (German)<input name="euWorkPermitDe"></label>
+          <label>EU work permit (English)<input name="euWorkPermitEn"></label>
           <label>Desired annual salary (digits only)<input name="desiredSalaryAnnualEur" inputmode="numeric" pattern="[0-9]*"></label>
           <label>Minimum weekly hours<input name="weeklyHoursMin" inputmode="numeric"></label>
           <label>Maximum weekly hours<input name="weeklyHoursMax" inputmode="numeric"></label>
+          <label>Commute preference (German)<input name="commuteDe"></label>
+          <label>Commute preference (English)<input name="commuteEn"></label>
+          <label>Salary negotiable (German)<input name="salaryNegotiableDe"></label>
+          <label>Salary negotiable (English)<input name="salaryNegotiableEn"></label>
           <label>German level<input name="germanLevel"></label>
           <label>English level<input name="englishLevel"></label>
+          <label>Start availability (German)<input name="startAvailabilityDe"></label>
+          <label>Start availability (English)<input name="startAvailabilityEn"></label>
         </form>
         <div class="account-actions">
           <button id="saveProfileButton" type="button">Save application profile</button>
