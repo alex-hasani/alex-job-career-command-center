@@ -95,6 +95,8 @@ test('password changes require confirmation and system messages use the top dial
   assert.match(html,/<dialog id="message"/);
   assert.match(client,/body\.newPassword!==body\.confirmNewPassword/);
   assert.match(client,/node\.showModal\(\)/);
+  assert.match(client,/form\.reset\(\)/);
+  assert.doesNotMatch(client,/event\.currentTarget\.reset\(\)/);
   assert.match(server,/PASSWORD_MISMATCH/);
 });
 

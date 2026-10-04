@@ -144,10 +144,10 @@ $('#accountDetailsForm').addEventListener('submit',async event=>{
   catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#passwordForm').addEventListener('submit',async event=>{
-  event.preventDefault();const button=event.currentTarget.querySelector('button'),body=Object.fromEntries(new FormData(event.currentTarget).entries());
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),body=Object.fromEntries(new FormData(form).entries());
   if(body.newPassword!==body.confirmNewPassword)return showMessage('The new passwords do not match.',true);
   button.disabled=true;
-  try { await api('/api/user-space/password',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});event.currentTarget.reset();showMessage('Password changed. Other sessions were signed out.'); }
+  try { await api('/api/user-space/password',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)});form.reset();showMessage('Password changed. Other sessions were signed out.'); }
   catch(error){showMessage(error.message,true);} finally{button.disabled=false;}
 });
 $('#uploadButton').addEventListener('click', async () => {
