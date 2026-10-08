@@ -19,6 +19,7 @@ import { appendActivityEvent, readActivityEvents } from './activity-log.mjs';
 import { buildGmailReconciliationPrompt, gmailReconciliationCheckpoint } from './gmail-reconciliation-prompt.mjs';
 import { isTechnicalRole } from './job-role-scope.mjs';
 import { createUserSpaceRouter } from './user-space.mjs';
+import { buildSourceSearchUrls } from './source-search-urls.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -235,8 +236,8 @@ const profile = {
   }
 };
 const baseDirectSources = [
-  { name:'Indeed Germany', url:'https://de.indeed.com/', careerChangeUrl:'https://de.indeed.com/q-it-quereinsteiger-l-stuttgart-jobs.html', kind:'General job board' },
-  { name:'XING Jobs', url:'https://www.xing.com/jobs', kind:'Professional network' },
+  { name:'Indeed Germany', url:'https://de.indeed.com/', searchUrlTemplate:'https://de.indeed.com/jobs?q={keywords}&l={location}&fromage=7', searchLaneLimit:3, includeHomepage:false, careerChangeUrl:'https://de.indeed.com/q-it-quereinsteiger-l-stuttgart-jobs.html', kind:'General job board' },
+  { name:'XING Jobs', url:'https://www.xing.com/jobs', searchUrlTemplate:'https://www.xing.com/jobs/{keywordSlug}-jobs-in-{locationSlug}', searchLaneLimit:3, includeHomepage:false, kind:'Professional network' },
   { name:'get in IT', url:'https://www.get-in-it.de/jobsuche', careerChangeUrl:'https://starte-hier.get-in-it.de/quereinsteiger', kind:'IT job board' },
   { name:'Jobrapido Germany', url:'https://de.jobrapido.com/', kind:'Job aggregator' },
   { name:'Talent.com Germany', url:'https://de.talent.com/', kind:'Job board' },
@@ -246,7 +247,7 @@ const baseDirectSources = [
   { name:'IT-Jobs.de', url:'https://en.it-jobs.de/', kind:'IT job board' },
   { name:'hackajob', url:'https://hackajob.com/', kind:'Tech talent platform' },
   { name:'Schwarz Digits', url:'https://schwarz-digits.de/jobsearch?includeAllLanguages=true', kind:'Employer careers' },
-  { name:'StepStone Germany', url:'https://www.stepstone.de/', careerChangeUrl:'https://www.stepstone.de/jobs/quereinsteiger-it/in-stuttgart', kind:'General job board' },
+  { name:'StepStone Germany', url:'https://www.stepstone.de/', searchUrlTemplate:'https://www.stepstone.de/jobs/{keywordSlug}/in-{locationSlug}?radius=50', searchLaneLimit:3, includeHomepage:false, careerChangeUrl:'https://www.stepstone.de/jobs/quereinsteiger-it/in-stuttgart', kind:'General job board' },
   { name:'Schwarz Global Services', url:'https://schwarzgt.jobs.schwarz/search', kind:'Employer careers' },
   { name:'Computerwoche Jobs', url:'https://jobs.computerwoche.de/', kind:'IT job board' },
   { name:'Swoboda Careers', url:'https://www.swoboda.com/en/careers/', kind:'Employer careers' },
@@ -257,7 +258,7 @@ const baseDirectSources = [
   { name:'Siemens Jobs', url:'https://jobs.siemens.com/', kind:'Employer careers' },
   { name:'SAP Careers', url:'https://jobs.sap.com/', kind:'Employer careers' },
   { name:'Bosch Careers', url:'https://jobs.bosch.com/', kind:'Employer careers' },
-  { name:'LinkedIn Jobs', url:'https://www.linkedin.com/jobs/', kind:'Professional network' },
+  { name:'LinkedIn Jobs', url:'https://www.linkedin.com/jobs/', searchUrlTemplate:'https://de.linkedin.com/jobs/search?keywords={keywords}&location={location}&f_TPR=r604800', searchLaneLimit:3, includeHomepage:false, kind:'Professional network' },
   { name:'CANCOM Careers', url:'https://karriere.cancom.de/jobs/', kind:'Employer careers' }
   ,{ name:'Stellenanzeigen.de', url:'https://www.stellenanzeigen.de/', kind:'General job board' }
   ,{ name:'Rems-Murr-Jobs', url:'https://rems-murr-jobs.de/', kind:'Regional job board' }
@@ -716,8 +717,10 @@ function directSourceFailure(error) {
 }
 async function attemptDirectSource(site, query, location) {
   const startedAt=Date.now(), checkedAt=new Date().toISOString();
+  const laneTerms=providerSearchLanes(query).map(primarySearchTerm);
+  const targetedUrls=buildSourceSearchUrls(site,laneTerms,providerLocation(location));
+  const urls=[...new Set([...(site.includeHomepage === false ? [] : [site.url]),...targetedUrls,site.careerChangeUrl].filter(Boolean))];
   try {
-    const urls=[...new Set([site.url, site.careerChangeUrl].filter(Boolean))];
     const pageResults=await Promise.allSettled(urls.map(async url => {
       const response=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(8000),headers:{
         'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36',
@@ -728,12 +731,17 @@ async function attemptDirectSource(site, query, location) {
     }));
     const pages=pageResults.map(result => result.status === 'fulfilled' ? result.value : '');
     if (!pages.some(Boolean)) throw pageResults.find(result => result.status === 'rejected')?.reason || new Error('No readable source page');
-    const jobs=uniqueJobs(pages.flatMap((page,index) => page ? directSourceJobs(page,{...site,url:urls[index]},providerLocation(location)).map(job => index > 0 ? {...job,careerChangePossible:true,careerChangeEvidence:'Dedicated Quereinstieg search page'} : job) : []));
+    const jobs=uniqueJobs(pages.flatMap((page,index) => {
+      if (!page) return [];
+      const isCareerChangePage=urls[index] === site.careerChangeUrl;
+      return directSourceJobs(page,{...site,url:urls[index]},providerLocation(location))
+        .map(job => isCareerChangePage ? {...job,careerChangePossible:true,careerChangeEvidence:'Dedicated Quereinstieg search page'} : job);
+    }));
     return {source:site.name+' (source pool)',registrySource:site.name,status:jobs.length?'ok':'no_matches',
-      message:jobs.length?'Parsed '+jobs.length+' matching postings from the configured source URL':'Configured source URL was searched, but no matching public postings could be parsed',
-      jobs,checkedAt,latencyMs:Date.now()-startedAt,searchUrl:site.url,query,location};
+      message:jobs.length?'Parsed '+jobs.length+' matching postings from '+urls.length+' focused source page(s)':'Focused source pages were searched, but no matching public postings could be parsed',
+      jobs,checkedAt,latencyMs:Date.now()-startedAt,searchUrl:targetedUrls[0] || site.url,searchUrls:urls,query,location};
   } catch(error) {
-    return {source:site.name+' (source pool)',registrySource:site.name,...directSourceFailure(error),jobs:[],checkedAt,latencyMs:Date.now()-startedAt,searchUrl:site.url,query,location};
+    return {source:site.name+' (source pool)',registrySource:site.name,...directSourceFailure(error),jobs:[],checkedAt,latencyMs:Date.now()-startedAt,searchUrl:targetedUrls[0] || site.url,searchUrls:urls,query,location};
   }
 }
 async function mapWithConcurrency(items, limit, worker) {
