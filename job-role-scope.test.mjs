@@ -5,6 +5,7 @@ import { isTechnicalRole } from './job-role-scope.mjs';
 test('keeps technical infrastructure and support roles', () => {
   for (const title of [
     'IT System Engineer / Systemarchitekt (m/w/d)',
+    'Senior Systems Engineer',
     'Cloud Platform Engineer Azure',
     'Senior Systemadministrator Microsoft 365',
     'Technical Support Engineer L3',

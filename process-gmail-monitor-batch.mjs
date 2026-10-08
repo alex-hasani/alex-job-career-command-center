@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
+import { gmailJobKey, importGmailDiscoveredJobs, normalizeGmailDiscoveredJob } from './gmail-job-discovery.mjs';
 
 const allowedStatuses = new Set(['Applied', 'Interviewing', 'Offer', 'Rejected', 'Withdrawn', 'Case Closed']);
 
@@ -78,11 +79,15 @@ async function loadBatch(path) {
   if (!Number.isInteger(reviewedMessages) || reviewedMessages < 0) fail('reviewedMessages must be a non-negative integer');
   const checkpointAt = iso(raw.checkpointAt, 'checkpointAt');
   if (new Date(checkpointAt).getTime() > Date.now() + 60_000) fail('checkpointAt cannot be in the future');
-  if (!Array.isArray(raw.events) || raw.events.length > 20) fail('events must be an array with at most 20 items');
-  const events = raw.events.map(normalizeEvent);
+  if (!Array.isArray(raw.events || []) || (raw.events || []).length > 20) fail('events must be an array with at most 20 items');
+  const events = (raw.events || []).map(normalizeEvent);
   const keys = events.map(eventKey);
   if (new Set(keys).size !== keys.length) fail('events contain a duplicate Gmail message/timestamp/status key');
-  return { version:1, reviewedMessages, checkpointAt, events };
+  if (!Array.isArray(raw.jobs || []) || (raw.jobs || []).length > 12) fail('jobs must be an array with at most 12 items');
+  const jobs = (raw.jobs || []).map(normalizeGmailDiscoveredJob);
+  const jobKeys = jobs.map(gmailJobKey);
+  if (new Set(jobKeys).size !== jobKeys.length) fail('jobs contain a duplicate Gmail message/exact URL key');
+  return { version:2, reviewedMessages, checkpointAt, events, jobs };
 }
 
 function runJson(scriptPath, args, options = {}) {
@@ -134,6 +139,12 @@ async function execute(journalPath, evidencePath, databasePath, statePath, syncU
   }
 
   if (stage === 'reconciled') {
+    journal.jobImport = importGmailDiscoveredJobs(databasePath, journal.batch.jobs || []);
+    journal.stage = stage = 'jobs_imported';
+    await atomicJson(journalPath, journal);
+  }
+
+  if (stage === 'jobs_imported') {
     if (journal.reconcileCount > 0) {
       const response = await fetch(syncUrl, { method:'POST', headers:{ accept:'application/json' } });
       if (!response.ok) throw new Error(`Excel sync returned HTTP ${response.status}`);
@@ -157,6 +168,9 @@ async function execute(journalPath, evidencePath, databasePath, statePath, syncU
     reviewedMessages:journal.batch.reviewedMessages,
     appended:journal.appendedCount,
     reconciled:journal.reconcileCount,
+    processedJobs:journal.jobImport?.processed || 0,
+    addedJobs:journal.jobImport?.added || 0,
+    updatedJobs:journal.jobImport?.updated || 0,
     checkpointAt:journal.batch.checkpointAt
   };
   await rm(journalPath, { force:true });
@@ -201,7 +215,7 @@ const evidenceText = await readFile(evidencePath, 'utf8');
 const evidence = JSON.parse(evidenceText);
 if (!Array.isArray(evidence)) fail('lifecycle evidence file must contain an array');
 await atomicJson(journalPath, {
-  version:1,
+  version:2,
   stage:'prepared',
   createdAt:new Date().toISOString(),
   preEvidenceCount:evidence.length,

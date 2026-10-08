@@ -31,15 +31,31 @@ test('monitor batch appends once, recovers after sync failure, and advances chec
     create:{ company:'Example GmbH', title:'Systems Engineer', location:'Germany', url:'', source:'Application email', provider:'Gmail evidence' },
     comment:'Email evidence (Gmail 1abc234def567890): Example GmbH explicitly confirmed receipt of the application.'
   };
+  const discoveredJob = {
+    id:'email_job__1abc234def567890__systems_engineer',
+    gmailMessageId:'1abc234def567890',
+    originalTimestamp:'2026-10-01T11:20:34+00:00',
+    verifiedAt:'2026-10-01T11:30:00+00:00',
+    openStatus:'open',
+    title:'Senior Systems Engineer',
+    company:'Example Infrastructure GmbH',
+    location:'Stuttgart',
+    url:'https://careers.example.com/jobs/12345-senior-systems-engineer',
+    source:'Gmail job list',
+    provider:'Example Careers',
+    description:'Operate Windows Server, Linux, VMware, Azure and Active Directory infrastructure. Troubleshoot incidents and automate administration with PowerShell.',
+    workType:'Full-time',
+    remote:false
+  };
   await writeFile(evidencePath, '[]\n');
   await writeFile(statePath, JSON.stringify({ leads:[] }, null, 2));
-  await writeFile(batchPath, JSON.stringify({ reviewedMessages:4, checkpointAt, events:[event] }, null, 2));
+  await writeFile(batchPath, JSON.stringify({ reviewedMessages:4, checkpointAt, events:[event], jobs:[discoveredJob] }, null, 2));
   openJobDatabase(databasePath).db.close();
 
   try {
     await assert.rejects(execFileAsync(process.execPath, [scriptPath, 'run', batchPath, evidencePath, databasePath, statePath, 'http://127.0.0.1:1/api/sync-excel']), /fetch failed|Excel sync/);
     assert.equal(JSON.parse(await readFile(evidencePath, 'utf8')).length, 1);
-    assert.equal(JSON.parse(await readFile(join(directory, 'gmail-monitor-batch-journal.json'), 'utf8')).stage, 'reconciled');
+    assert.equal(JSON.parse(await readFile(join(directory, 'gmail-monitor-batch-journal.json'), 'utf8')).stage, 'jobs_imported');
 
     let syncCalls = 0;
     const server = createServer((req, res) => {
@@ -54,6 +70,8 @@ test('monitor batch appends once, recovers after sync failure, and advances chec
       const result = JSON.parse(stdout);
       assert.equal(result.resumed, true);
       assert.equal(result.appended, 1);
+      assert.equal(result.processedJobs, 1);
+      assert.equal(result.addedJobs, 1);
       assert.equal(syncCalls, 1);
     } finally {
       server.close();
@@ -67,6 +85,10 @@ test('monitor batch appends once, recovers after sync failure, and advances chec
       assert.equal(checkpoint.reviewedMessages, 4);
       assert.equal(checkpoint.genuineChanges, 1);
       assert.equal(jobDb.listJobs({ includeInactive:true }).find(job => job.id === event.id).applicationStatus, 'Applied');
+      const imported = jobDb.listJobs({ includeInactive:true }).find(job => job.id === discoveredJob.id);
+      assert.equal(imported.applicationStatus, 'Not recorded');
+      assert.equal(imported.emailDiscovered, true);
+      assert.ok(imported.interviewFitScore >= 0);
     } finally {
       jobDb.db.close();
     }
