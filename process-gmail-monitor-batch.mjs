@@ -145,12 +145,7 @@ async function execute(journalPath, evidencePath, databasePath, statePath, syncU
   }
 
   if (stage === 'jobs_imported') {
-    if (journal.reconcileCount > 0) {
-      const response = await fetch(syncUrl, { method:'POST', headers:{ accept:'application/json' } });
-      if (!response.ok) throw new Error(`Excel sync returned HTTP ${response.status}`);
-      const result = await response.json();
-      if (result?.ok !== true) throw new Error('Excel sync did not confirm success');
-    }
+    journal.excelMirror = 'retired';
     journal.stage = stage = 'synced';
     await atomicJson(journalPath, journal);
   }
