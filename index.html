@@ -1224,8 +1224,8 @@
             <div class="field">
               <label for="applicationStatus">Application status</label
               ><select id="applicationStatus">
-                <option value="active" selected>Active applications</option>
-                <option value="">Any application status</option>
+                <option value="active">Active applications</option>
+                <option value="" selected>Any application status</option>
               </select>
             </div>
           </div>
@@ -1354,12 +1354,9 @@
             <div class="panel metric">
               <span>SQLite records</span><b id="dbCount">0</b><small>local source of truth</small>
             </div>
-            <div class="panel metric">
-              <span>Excel mirror</span><b id="excelState">—</b><small>automatic synchronisation</small>
-            </div>
           </div>
           <details class="panel info" id="outcomeIntelligence"><summary><b>Application outcome intelligence</b></summary><p id="outcomeSummary">Conversion metrics will appear when application outcomes are recorded.</p></details>
-          <div class="sync-state"><span class="sync-chip" id="dbStatus">SQLite starting</span><span class="sync-chip" id="excelStatus">Excel sync pending</span></div>
+          <div class="sync-state"><span class="sync-chip" id="dbStatus">SQLite starting</span></div>
           <details class="panel network">
             <summary class="networktop">
               <div>
@@ -1679,10 +1676,10 @@
       }
       function applicationStatusOptions() {
         const select = $("applicationStatus");
-        const current = select.dataset.initialized ? select.value : (viewMode === "board" ? "" : "active");
+        const current = select.dataset.initialized ? select.value : "";
         const counts = Object.fromEntries(statuses.map(status => [status, jobs.filter(job => job.applicationStatus === status).length]));
         select.innerHTML = `<option value="active">Active applications (${jobs.filter(job => job.lifecycleStatus !== "archived" && !["Rejected", "Withdrawn", "Case Closed"].includes(job.applicationStatus)).length})</option><option value="">Any application status (${jobs.length})</option><optgroup label="Actual status">${statuses.map(status => `<option value="${status}">${status} (${counts[status] || 0})</option>`).join("")}</optgroup>`;
-        select.value = [...select.options].some(option => option.value === current) ? current : "active";
+        select.value = [...select.options].some(option => option.value === current) ? current : "";
         select.dataset.initialized = "true";
       }
       const criteriaFields = ["query","location","company","sourceSelect","language","workType","experience","salary","freshness","model","match","recommendation","opportunity","salaryOnly","applyOnly","includeRemoteAnywhere","careerChangeOnly","stream","applicationStatus","sort","search"];
@@ -1934,7 +1931,7 @@
           ${strategicDetail}
           <div class="evidence"><b>Match evidence</b><p>${j.origin === "agent" ? "Verified strengths are separated from gaps and practical constraints. Adjust Match weighting in Filters to personalise this score." : "Only skills explicitly detected in the title or source description count toward this discovery score."}</p><div class="proof">${strengths.length ? strengths.map(x => `<span>✓ ${escapeHtml(x)}</span>`).join("") : "<span>Title alignment only — review the source.</span>"}</div></div>
           <details class="commute" data-job-id="${escapeHtml(j.id)}" data-map-query="${escapeHtml(destination)}"><summary>Google Map and route from Strümpfelbach</summary><div class="commute-body"><p class="commute-note"><b>Destination:</b> ${escapeHtml(destination)} · ${hasExactAddress ? "Exact address supplied by the job record." : "Street address was not supplied; Google Maps will resolve the employer and stated location. Confirm the destination before travelling."}</p><div class="commute-actions"><a href="${escapeHtml(mapSearch)}" target="_blank" rel="noopener">Open in Google Maps</a><a href="${escapeHtml(drivingRoute)}" target="_blank" rel="noopener">Driving route</a><a href="${escapeHtml(transitRoute)}" target="_blank" rel="noopener">Public transport route</a></div><div class="commute-map" aria-live="polite"><span class="muted">Map loads when this section is opened.</span></div></div></details>
-          <details class="jd" data-job-id="${escapeHtml(j.id)}" data-has-full-jd="${hasFullStoredJd}"><summary>JD details and strategic assessment</summary><div class="jd-body"><div class="jd-refresh-row"><button class="refresh-jd" type="button" data-job-id="${escapeHtml(j.id)}">Refresh full JD</button><span class="jd-fetch-status muted" aria-live="polite">${hasFullStoredJd ? `Stored full JD · ${escapeHtml(j.jdSource || "verified source")}` : "Open this section to retrieve the full JD."}</span></div><div class="detail-grid"><span><b>Role track</b>${escapeHtml(j.track || "Not stated")}</span><span><b>Employment</b>${escapeHtml(j.employment || j.workType || "Not stated")}</span><span><b>Recruiter/contact</b>${escapeHtml(j.recruiterContact || "Not listed")}</span><span><b>Open status</b>${escapeHtml(j.openStatus || j.availabilityStatus || "Not stated")}</span><span><b>Salary basis</b>${escapeHtml(j.salaryAssessment?.basis || j.salaryBasis || "Not disclosed")}</span><span><b>Recommended CV</b>${escapeHtml(j.recommendedCvBase || "Use verified base CV")}</span><span><b>Checked</b>${checkedAt ? new Date(checkedAt).toLocaleString("en-GB") : "During application preparation"}</span><span><b>Tracker location</b>${escapeHtml(j.trackerSheet ? `${j.trackerSheet}, row ${j.trackerRow}` : "SQLite and Excel live-results sheet")}</span></div><b>${hasFullStoredJd ? "Full JD / stored snapshot" : "JD retrieval status"}</b><p class="jd-snapshot">${detail}</p><b>Requirement-evidence matrix</b><p>${escapeHtml(j.resumeVerdict || "Assessment is based only on the available JD and approved resume evidence.")}</p>${comparison.length ? `<div class="comparison-table">${comparison.map(item => `<div><b>${escapeHtml(item.requirement)}</b><span>${escapeHtml(item.matchType || item.assessment)}</span><p>${escapeHtml(item.candidateEvidence || item.evidence)}</p><div class="matrix-meta"><small>${escapeHtml(item.importance || "Importance unclear")}</small><small>${escapeHtml(item.evidenceRecency || "Recency unknown")}</small><small>${escapeHtml(item.evidenceDepth || "Depth unknown")}</small><small>${escapeHtml(item.confidence || "Confidence unknown")}</small><small>${escapeHtml(item.risk || "Risk not assessed")}</small></div></div>`).join("")}</div>` : ""}<b>Why it fits — evidence-backed</b><ul class="assessment-list">${resumeStrengths.length ? resumeStrengths.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No verified strength was detected from the available JD text.</li>"}</ul><b>Main risks / gaps</b><ul class="assessment-list">${gaps.length ? gaps.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No major gap detected from the available JD; confirm depth, recency and employer-specific tools.</li>"}</ul>${j.cvAngle ? `<b>Suggested CV and application angle</b><p>${escapeHtml(j.cvAngle)}</p>` : ""}<b>${readinessPlan.length > 7 ? "Two-week" : "One-week"} interview readiness plan</b><div class="readiness-table-wrap"><table class="readiness-table"><thead><tr><th>Day</th><th>Focus</th><th>Daily action</th><th>Deliverable</th><th>Time</th></tr></thead><tbody>${readinessRows}</tbody></table></div>${constraints.length ? `<b>Practical checks</b><ul class="assessment-list">${constraints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}${requirements.length ? `<b>Application requirements</b><ul class="assessment-list">${requirements.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}</div></details>
+          <details class="jd" data-job-id="${escapeHtml(j.id)}" data-has-full-jd="${hasFullStoredJd}"><summary>JD details and strategic assessment</summary><div class="jd-body"><div class="jd-refresh-row"><button class="refresh-jd" type="button" data-job-id="${escapeHtml(j.id)}">Refresh full JD</button><span class="jd-fetch-status muted" aria-live="polite">${hasFullStoredJd ? `Stored full JD · ${escapeHtml(j.jdSource || "verified source")}` : "Open this section to retrieve the full JD."}</span></div><div class="detail-grid"><span><b>Role track</b>${escapeHtml(j.track || "Not stated")}</span><span><b>Employment</b>${escapeHtml(j.employment || j.workType || "Not stated")}</span><span><b>Recruiter/contact</b>${escapeHtml(j.recruiterContact || "Not listed")}</span><span><b>Open status</b>${escapeHtml(j.openStatus || j.availabilityStatus || "Not stated")}</span><span><b>Salary basis</b>${escapeHtml(j.salaryAssessment?.basis || j.salaryBasis || "Not disclosed")}</span><span><b>Recommended CV</b>${escapeHtml(j.recommendedCvBase || "Use verified base CV")}</span><span><b>Checked</b>${checkedAt ? new Date(checkedAt).toLocaleString("en-GB") : "During application preparation"}</span><span><b>Tracker location</b>${escapeHtml(j.trackerSheet ? `${j.trackerSheet}, row ${j.trackerRow}` : "SQLite database")}</span></div><b>${hasFullStoredJd ? "Full JD / stored snapshot" : "JD retrieval status"}</b><p class="jd-snapshot">${detail}</p><b>Requirement-evidence matrix</b><p>${escapeHtml(j.resumeVerdict || "Assessment is based only on the available JD and approved resume evidence.")}</p>${comparison.length ? `<div class="comparison-table">${comparison.map(item => `<div><b>${escapeHtml(item.requirement)}</b><span>${escapeHtml(item.matchType || item.assessment)}</span><p>${escapeHtml(item.candidateEvidence || item.evidence)}</p><div class="matrix-meta"><small>${escapeHtml(item.importance || "Importance unclear")}</small><small>${escapeHtml(item.evidenceRecency || "Recency unknown")}</small><small>${escapeHtml(item.evidenceDepth || "Depth unknown")}</small><small>${escapeHtml(item.confidence || "Confidence unknown")}</small><small>${escapeHtml(item.risk || "Risk not assessed")}</small></div></div>`).join("")}</div>` : ""}<b>Why it fits — evidence-backed</b><ul class="assessment-list">${resumeStrengths.length ? resumeStrengths.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No verified strength was detected from the available JD text.</li>"}</ul><b>Main risks / gaps</b><ul class="assessment-list">${gaps.length ? gaps.slice(0,5).map(x => `<li>${escapeHtml(x)}</li>`).join("") : "<li>No major gap detected from the available JD; confirm depth, recency and employer-specific tools.</li>"}</ul>${j.cvAngle ? `<b>Suggested CV and application angle</b><p>${escapeHtml(j.cvAngle)}</p>` : ""}<b>${readinessPlan.length > 7 ? "Two-week" : "One-week"} interview readiness plan</b><div class="readiness-table-wrap"><table class="readiness-table"><thead><tr><th>Day</th><th>Focus</th><th>Daily action</th><th>Deliverable</th><th>Time</th></tr></thead><tbody>${readinessRows}</tbody></table></div>${constraints.length ? `<b>Practical checks</b><ul class="assessment-list">${constraints.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}${requirements.length ? `<b>Application requirements</b><ul class="assessment-list">${requirements.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}</div></details>
           <div class="job-actions"><label class="status-control">Application status <select class="application-status-control" data-job-id="${escapeHtml(j.id)}">${statuses.map(s => `<option${s === j.applicationStatus ? " selected" : ""}>${s}</option>`).join("")}</select></label><label class="comment-control"><span>Application comment</span><textarea class="application-comment-control" data-job-id="${escapeHtml(j.id)}" maxlength="2000" placeholder="Why I applied or skipped it, follow-up plan, interview notes…">${escapeHtml(j.applicationComment || "")}</textarea><button class="save-comment" type="button" data-job-id="${escapeHtml(j.id)}">Save note</button><span class="comment-save-state" aria-live="polite"></span></label><button class="prepare-application" type="button" data-job-id="${escapeHtml(target.id)}"${["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) ? " disabled" : ""}>${j.documentGenerationGate === "CONFIRM FIRST" ? "Review stretch application" : target.applicationPackage ? "Regenerate package" : "Prepare application"}</button><button class="website-apply-button" type="button" data-job-id="${escapeHtml(target.id)}"${!/^https?:\/\//i.test(String(target.url || "")) || ["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) ? " disabled" : ""}>Start AI website application</button><button class="edit-website-apply-link" type="button" data-job-id="${escapeHtml(target.id)}"${["Rejected","Withdrawn","Case Closed"].includes(j.applicationStatus) ? " disabled" : ""}>Edit link / Retry AI Apply</button><button class="fast-apply-button" type="button" data-job-id="${escapeHtml(target.id)}">Fast Apply</button><span class="muted">${escapeHtml(sourceCheck)} · ${escapeHtml(j.documentGenerationGate || "Review document need")}</span></div>
           <div class="application-timing"><span><b>Applied:</b> ${escapeHtml(formatDateTime(j.appliedAt, "Date not recorded"))}</span><span><b>Status last changed:</b> ${escapeHtml(formatDateTime(j.applicationStatusChangedAt, "Timestamp not recorded"))}</span>${history.length ? `<details class="status-history"><summary>View status history (${history.length})</summary><ol>${history.map(event => `<li>${escapeHtml(formatDateTime(event.changedAt))}: ${escapeHtml(event.previousStatus || "—")} → ${escapeHtml(event.newStatus)}${event.source ? ` · ${escapeHtml(event.source)}` : ""}</li>`).join("")}</ol></details>` : ""}</div>
           <div class="foot"><span>${escapeHtml(j.salaryText || money(j.salaryMax || j.salaryMin))}</span><span>${j.posted ? `Posted ${new Date(j.posted).toLocaleDateString("en-GB")}` : j.foundAt ? `Found ${new Date(j.foundAt).toLocaleDateString("en-GB")}` : "Date not stated"}</span></div>
@@ -2087,7 +2084,7 @@
         databaseStats = data.databaseStats || {};
         $("updated").textContent = data.refreshedAt
           ? `Database refreshed ${new Date(data.refreshedAt).toLocaleString("en-GB")}`
-          : "Loaded Excel tracker · live database not refreshed yet";
+          : "Loaded saved database · live results not refreshed yet";
         $("online").textContent = sourceStates.filter((x) => x.status === "ok").length;
         $("agentCount").textContent = data.agentLeadCount || 0;
         $("dbCount").textContent = databaseStats.total || jobs.length;
@@ -2096,12 +2093,6 @@
         $("outcomeSummary").textContent = conversion.applications
           ? `${conversion.applications} tracked applications · ${conversion.interviews || 0} current interview/offer outcomes · application-to-interview ${conversion.applicationToInterview ?? "not enough data"}% · interview-to-offer ${conversion.interviewToOffer ?? "not enough data"}%. Treat this as directional until stage-history cohorts are large enough.`
           : "No completed application funnel is available yet. The system will learn from recorded applications, interview stages, rejections and offers without overreacting to one outcome.";
-        let excelSync = data.excelSync;
-        try { if (typeof excelSync === "string") excelSync = JSON.parse(excelSync); } catch { excelSync = null; }
-        $("excelState").textContent = excelSync ? "Synced" : "Pending";
-        $("excelStatus").textContent = excelSync
-          ? `${excelSync.jobs ?? jobs.length} rows · ${excelSync.syncedAt ? new Date(excelSync.syncedAt).toLocaleString("en-GB") : "current session"}`
-          : "The next database change will create the Excel mirror";
         $("subtitle").textContent = `${data.query} · ${data.location || "Germany"} · saved database`;
         sourceOptions();
         applicationStatusOptions();
@@ -2195,6 +2186,7 @@
       setInterval(loadEmailSyncStatus, 30000);
       async function refresh(trigger = "manual") {
         const b = $("refresh");
+        const browserDeadline = Date.now() + 5 * 60 * 1000;
         b.disabled = true;
         b.textContent = "Refreshing database...";
         $("subtitle").textContent = trigger === "automatic"
@@ -2210,6 +2202,7 @@
           let state = await start.json();
           showProgress(state);
           while (state.status === "running") {
+            if (Date.now() >= browserDeadline) throw new Error("This refresh took too long and was stopped safely. Your saved results are still available; try again or narrow the source pool.");
             await new Promise(resolve => setTimeout(resolve, 900));
             const response = await fetch(`/api/refresh?id=${encodeURIComponent(state.id)}`, { cache:"no-store" });
             if (!response.ok) throw new Error("The refresh progress could not be read.");
@@ -2324,7 +2317,7 @@
           const data = await readWriteResponse(response);
           if (!response.ok) throw new Error(data.error || "Could not save status");
           jobs = jobs.map(job => job.id === data.job.id ? { ...job, ...data.job } : job);
-          $("updated").textContent = `${control.value} saved to SQLite and Excel · ${new Date().toLocaleString("en-GB")}`;
+          $("updated").textContent = `${control.value} saved to SQLite · ${new Date().toLocaleString("en-GB")}`;
           applicationStatusOptions();
           render();
         } catch (error) {
@@ -2341,7 +2334,7 @@
         const state = control.closest(".comment-control")?.querySelector(".comment-save-state");
         control.dataset.saving = "true";
         control.disabled = true;
-        if (state) state.textContent = "Saving to SQLite and Excel…";
+        if (state) state.textContent = "Saving to SQLite…";
         try {
           const response = await fetch("/api/application-comment", {
             method: "POST",
@@ -2351,8 +2344,8 @@
           const data = await readWriteResponse(response);
           if (!response.ok) throw new Error(data.error || "Could not save comment");
           jobs = jobs.map(item => item.id === data.job.id ? { ...item, ...data.job } : item);
-          if (state) state.textContent = `Saved to SQLite and Excel at ${new Date().toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" })}`;
-          $("updated").textContent = `Application comment saved to SQLite and Excel · ${new Date().toLocaleString("en-GB")}`;
+          if (state) state.textContent = `Saved to SQLite at ${new Date().toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" })}`;
+          $("updated").textContent = `Application comment saved to SQLite · ${new Date().toLocaleString("en-GB")}`;
         } catch (error) {
           if (state) state.textContent = error.message;
           alert(error.message);
@@ -2924,7 +2917,7 @@
             const sent=await fetch('/api/website-apply/submit',{method:'POST',headers:writeHeaders(),body:JSON.stringify({id,confirmed:true})});
             const result=await readWriteResponse(sent); if(!sent.ok) throw new Error(result.error || 'Website submission could not be confirmed');
             jobs=jobs.map(job=>job.id===result.job.id?{...job,...result.job}:job); applicationStatusOptions(); render();
-            $("updated").textContent='Website application submitted and recorded in SQLite and Excel.';
+            $("updated").textContent='Website application submitted and recorded in SQLite.';
           } else $("updated").textContent='Website application is ready in the browser; it was not submitted.';
         } else if(['submitted','closed','failed'].includes(data.session.status)) stopWebsiteApplyPolling(id);
       }
@@ -2973,7 +2966,7 @@
       }
       async function confirmApplicationSubmitted() {
         if (!currentApplicationJob || !confirm(`Confirm that you personally submitted the application to ${currentApplicationJob.company}?`)) return;
-        studioMessage("Recording the confirmed submission in SQLite and Excel...");
+        studioMessage("Recording the confirmed submission in SQLite...");
         try {
           const response = await fetch("/api/application-status", {
             method:"POST",
@@ -2986,7 +2979,7 @@
           currentApplicationJob = { ...currentApplicationJob, ...data.job };
           applicationStatusOptions();
           render();
-          studioMessage("Application recorded as Applied in SQLite and Excel.");
+          studioMessage("Application recorded as Applied in SQLite.");
           $("confirmSubmitted").hidden = true;
         } catch (error) { studioMessage(error.message, true); }
       }

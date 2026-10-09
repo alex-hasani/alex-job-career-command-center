@@ -715,14 +715,14 @@ function directSourceFailure(error) {
   const status = Number((message.match(/HTTP\s+(\d{3})/i) || [])[1] || 0);
   return [401,403,429].includes(status) ? {status:'access_restricted',message} : {status:'unavailable',message};
 }
-async function attemptDirectSource(site, query, location) {
+async function attemptDirectSource(site, query, location, signal) {
   const startedAt=Date.now(), checkedAt=new Date().toISOString();
   const laneTerms=providerSearchLanes(query).map(primarySearchTerm);
   const targetedUrls=buildSourceSearchUrls(site,laneTerms,providerLocation(location));
   const urls=[...new Set([...(site.includeHomepage === false ? [] : [site.url]),...targetedUrls,site.careerChangeUrl].filter(Boolean))];
   try {
     const pageResults=await Promise.allSettled(urls.map(async url => {
-      const response=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(8000),headers:{
+      const response=await fetch(url,{redirect:'follow',signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),headers:{
         'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36',
         'accept':'text/html,application/xhtml+xml','accept-language':'en-US,en;q=0.9,de;q=0.8'}});
       if(!response.ok) throw new Error('HTTP '+response.status);
@@ -749,6 +749,17 @@ async function mapWithConcurrency(items, limit, worker) {
   async function run(){while(true){const index=cursor++;if(index>=items.length)return;output[index]=await worker(items[index],index);}}
   await Promise.all(Array.from({length:Math.min(limit,items.length)},run));
   return output;
+}
+async function withinRefreshLimit(operation, timeoutMs, label, signal) {
+  let timeout;
+  let abortListener;
+  const timeoutFailure = new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(`${label} did not respond in time`)), timeoutMs); });
+  const abortFailure = signal ? new Promise((_, reject) => {
+    abortListener = () => reject(signal.reason instanceof Error ? signal.reason : new Error('Live refresh stopped safely after reaching its time limit'));
+    signal.addEventListener('abort', abortListener, { once:true });
+  }) : null;
+  try { return await Promise.race([Promise.resolve().then(operation), timeoutFailure, ...(abortFailure ? [abortFailure] : [])]); }
+  finally { clearTimeout(timeout); if (abortListener) signal.removeEventListener('abort', abortListener); }
 }
 async function eChinaCitiesJobs() {
   const url = 'https://jobs.echinacities.com/jobs/search?keyword=IT+Social+Media+Engineering+Engineer+software&cityid=&ins_ids=&jobType=6&lastUpdate=0&money_type=1&min_salary=&max_salary=';
@@ -1206,9 +1217,11 @@ async function providerDirectory(query, location) {
     };
   });
 }
-async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
+async function search(params, onProgress = () => {}, refreshId = randomUUID(), signal) {
+  const throwIfStopped = () => { if (signal?.aborted) throw (signal.reason instanceof Error ? signal.reason : new Error('Live refresh stopped safely after reaching its time limit')); };
   onProgress({ progress:3, phase:'Importing Excel tracker', completedSources:0, totalSources:0 });
   await safeImportTrackerIfNeeded();
+  throwIfStopped();
   const config = await getConfig();
   const query = params.get('query') || profile.defaultQuery;
   const location = params.get('location') || 'Germany';
@@ -1226,7 +1239,7 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
     const startedAt = Date.now();
     if (!provider.ready) result = { source:provider.name, status:'needs_key', jobs:[] };
     else {
-      try { result = { source:provider.name, status:'ok', jobs:await provider.run() }; }
+      try { result = { source:provider.name, status:'ok', jobs:await withinRefreshLimit(() => provider.run(), 45_000, `${provider.name} source`, signal) }; }
       catch (error) { result = { source:provider.name, status:'unavailable', message:error.message, jobs:[] }; }
     }
     result.latencyMs = Date.now() - startedAt;
@@ -1235,15 +1248,16 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
     return result;
   }));
   const directPromise = mapWithConcurrency(directSites, 12, async site => {
-    const result = await attemptDirectSource(site, query, location);
-    reportProgress(site.name);
-    return result;
+    try { return await attemptDirectSource(site, query, location, signal); }
+    finally { reportProgress(site.name); }
   });
   const [automaticResults, directResults] = await Promise.all([automaticPromise, directPromise]);
+  throwIfStopped();
   const results = [...automaticResults, ...directResults];
   onProgress({ progress:84, phase:'Matching and deduplicating full-pool results', completedSources, totalSources });
   const saved = (await agentJobs()).filter(isTechnicalRole);
   const live = filter(results.flatMap(x => x.jobs), query, location, includeRemoteAnywhere).filter(isTechnicalRole).map(score);
+  throwIfStopped();
   jobDb.saveRefresh(live, results, refreshId);
   const jobs = dedupe([...saved, ...live]).sort((a,b) => {
     if (a.origin === 'agent' && b.origin !== 'agent') return -1;
@@ -1256,6 +1270,7 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID()) {
   ];
   const data = { refreshedAt:new Date().toISOString(), query, location, profile:{ title:'Infrastructure Engineer / Systems Administrator', workAuthorisation:'Loaded from the private local profile', skills:Object.keys(profile.skills) }, sourceStatus, directSources:await providerDirectory(query, location), agentLeadCount:saved.length, jobs:jobDb.listJobs({ includeInactive:true }).filter(isTechnicalRole).map(assessJob), databaseStats:jobDb.stats() };
   onProgress({ progress:90, phase:'Saving SQLite database', completedSources, totalSources });
+  throwIfStopped();
   await writeFile(liveDatabasePath, JSON.stringify(data, null, 2), 'utf8');
   onProgress({ progress:94, phase:'Synchronising SQLite to Excel', completedSources, totalSources });
   queueExcelMirror('live-refresh');
@@ -1301,14 +1316,16 @@ function startRefresh(query, location, includeRemoteAnywhere=false) {
   );
   if (existing) return refreshStatus(existing);
   const id = randomUUID();
+  const controller = new AbortController();
+  const refreshDeadline = setTimeout(() => controller.abort(new Error('Live refresh stopped safely after four minutes. Your saved results are unchanged; try again or narrow the source pool.')), 240_000);
   const job = { id, status:'running', progress:1, phase:'Starting live refresh', completedSources:0, totalSources:0, startedAt:Date.now(), result:null, error:null, query:resolvedQuery, location:resolvedLocation, includeRemoteAnywhere:Boolean(includeRemoteAnywhere) };
   refreshJobs.set(id, job);
   const params = new URLSearchParams({ query:resolvedQuery, location:resolvedLocation, includeRemoteAnywhere:String(Boolean(includeRemoteAnywhere)) });
-  search(params, update => Object.assign(job, update), id).then(result => {
+  search(params, update => { if (job.status === 'running') Object.assign(job, update); }, id, controller.signal).then(result => {
     Object.assign(job, { status:'completed', progress:100, phase:'Database and website results ready', result, finishedAt:Date.now() });
   }).catch(error => {
     Object.assign(job, { status:'failed', phase:'Refresh failed', error:error.message, finishedAt:Date.now() });
-  });
+  }).finally(() => clearTimeout(refreshDeadline));
   return refreshStatus(job);
 }
 function jsonBody(req) {
