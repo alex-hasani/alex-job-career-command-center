@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
 const normal = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const TERMINAL_APPLICATION_STATUSES = new Set(['Rejected','Withdrawn','Case Closed']);
 
 export function canonicalUrl(value) {
   try {
@@ -32,8 +33,8 @@ export function openJobDatabase(path) {
   const db = new DatabaseSync(path);
   db.exec(`
     PRAGMA foreign_keys = ON;
-    -- Keep the dashboard responsive when Excel, OneDrive, or reconciliation
-    -- briefly holds a write lock; maintenance is deferred by the caller.
+    -- Keep user saves reliable when OneDrive, reconciliation, or another local
+    -- process briefly holds a write lock. Wait instead of losing the update.
     PRAGMA busy_timeout = 30000;
     -- The live database sits in OneDrive. WAL keeps -wal and -shm files open
     -- for the lifetime of the server, so OneDrive continually retries them.
@@ -139,13 +140,20 @@ export function openJobDatabase(path) {
   }
 
   function repairApplicationStateFromEvents() {
-    const rows = db.prepare(`SELECT j.record_key,j.job_id,j.application_status,j.lifecycle_status,j.status_changed_at,j.applied_at,j.payload_json,
+    const rows = db.prepare(`SELECT j.record_key,j.job_id,j.application_status,j.lifecycle_status,j.status_changed_at,j.applied_at,j.availability_status,j.active,j.payload_json,
       e.new_status,e.changed_at
       FROM jobs j
       JOIN application_events e ON e.id=(SELECT e2.id FROM application_events e2 WHERE e2.job_id=j.job_id ORDER BY e2.changed_at DESC,e2.id DESC LIMIT 1)
-      WHERE COALESCE(j.application_status,'')<>COALESCE(e.new_status,'')`).all();
-    if (!rows.length) return 0;
-    const update = db.prepare('UPDATE jobs SET application_status=?,lifecycle_status=?,status_changed_at=?,applied_at=?,updated_at=?,payload_json=? WHERE record_key=?');
+      WHERE COALESCE(j.application_status,'')<>COALESCE(e.new_status,'')
+         OR (e.new_status IN ('Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed')
+             AND (j.active<>0 OR COALESCE(j.availability_status,'')<>'unavailable'))`).all();
+    const archivedRows = db.prepare(`SELECT record_key,availability_status,active,payload_json FROM jobs
+      WHERE lifecycle_status='archived' AND (active<>0 OR COALESCE(availability_status,'')<>'unavailable')`).all();
+    const repairedKeys = new Set(rows.map(row => row.record_key));
+    const archivedOnlyRows = archivedRows.filter(row => !repairedKeys.has(row.record_key));
+    if (!rows.length && !archivedOnlyRows.length) return 0;
+    const update = db.prepare('UPDATE jobs SET application_status=?,lifecycle_status=?,status_changed_at=?,applied_at=?,availability_status=?,active=?,updated_at=?,payload_json=? WHERE record_key=?');
+    const archive = db.prepare('UPDATE jobs SET availability_status=?,active=0,updated_at=?,payload_json=? WHERE record_key=?');
     db.exec('BEGIN IMMEDIATE');
     try {
       for (const row of rows) {
@@ -155,11 +163,16 @@ export function openJobDatabase(path) {
         const changedAt = row.changed_at || row.status_changed_at || nowIso();
         const appliedAt = status === 'Applied' ? (row.applied_at || changedAt) : row.applied_at;
         const payload = { ...parsePayload(row.payload_json), applicationStatus:status, lifecycleStatus:lifecycle, applicationStatusChangedAt:changedAt, appliedAt };
-        update.run(status, lifecycle, changedAt, appliedAt, nowIso(), JSON.stringify(payload), row.record_key);
+        const terminal = ['Rejected','Withdrawn','Case Closed'].includes(status);
+        update.run(status, lifecycle, changedAt, appliedAt, terminal ? 'unavailable' : row.availability_status, terminal ? 0 : row.active, nowIso(), JSON.stringify(payload), row.record_key);
+      }
+      for (const row of archivedOnlyRows) {
+        const payload = { ...parsePayload(row.payload_json), lifecycleStatus:'archived', availabilityStatus:'unavailable', active:false };
+        archive.run('unavailable', nowIso(), JSON.stringify(payload), row.record_key);
       }
       db.exec('COMMIT');
     } catch (error) { db.exec('ROLLBACK'); throw error; }
-    return rows.length;
+    return rows.length + archivedOnlyRows.length;
   }
 
   function enrichPayloads(transform) {
@@ -220,9 +233,11 @@ export function openJobDatabase(path) {
       payload.jdSource = existingPayload.jdSource;
       payload.jdRetrievedAt = existingPayload.jdRetrievedAt;
     }
+    const inactive = TERMINAL_APPLICATION_STATUSES.has(applicationStatus) || lifecycleStatus === 'archived';
     const core = [
       job.id || recordKey, canonicalKey, canonicalUrl(job.url), origin, job.source || '', job.provider || '', job.title || '', job.company || '', job.location || '',
-      applicationStatus, applicationComment, lifecycleStatus, statusChangedAt, appliedAt, 'active', 1, 0
+      applicationStatus, applicationComment, lifecycleStatus, statusChangedAt, appliedAt,
+      inactive ? 'unavailable' : 'active', inactive ? 0 : 1, 0
     ];
     const seenAt = nowIso();
     if (existing) updateJob.run(...core, seenAt, timestamp, refreshId, JSON.stringify([...sourceSet]), JSON.stringify(payload), recordKey);

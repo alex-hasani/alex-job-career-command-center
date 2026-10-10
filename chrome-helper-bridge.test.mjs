@@ -21,7 +21,11 @@ test('personal Chrome helpers use isolated command channels', async () => {
 });
 
 test('Chrome helper searches embedded frames and clicks only the chosen application frame', async () => {
-  const source=await readFile(new URL('./chrome-helper-extension/service-worker.js',import.meta.url),'utf8');
+  const [source,agent,manifest]=await Promise.all([
+    readFile(new URL('./chrome-helper-extension/service-worker.js',import.meta.url),'utf8'),
+    readFile(new URL('./website-apply-agent.mjs',import.meta.url),'utf8'),
+    readFile(new URL('./chrome-helper-extension/manifest.json',import.meta.url),'utf8')
+  ]);
   assert.match(source,/target:\{tabId,allFrames:true\}/);
   assert.match(source,/frameIds:\[chosen\.frameId\]/);
   assert.match(source,/final\.test\(text\)/);
@@ -33,6 +37,11 @@ test('Chrome helper searches embedded frames and clicks only the chosen applicat
   assert.match(source,/node\?\.contentDocument/);
   assert.match(source,/node\?\.shadowRoots/);
   assert.match(source,/backendNodeId/);
+  assert.match(source,/for\(let attempt=0;attempt<2;attempt\+\+\)/);
+  assert.match(source,/Cannot find context/);
+  assert.match(agent,/posting[\s\S]+evaluateFrames/);
+  assert.match(agent,/including embedded frames/);
+  assert.match(manifest,/"version": "1\.2\.1"/);
 });
 
 test('Chrome helper exposes a safe current-page retry action', async () => {

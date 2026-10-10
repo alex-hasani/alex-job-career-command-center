@@ -343,8 +343,13 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   }
   async function posting(jobId) {
     return busy(async()=>{ const session=sessions.get(jobId); if(!session||!await pageExists(session.pageId)) throw new Error('The Google Chrome application tab is no longer open');
-    const result=await chrome.evaluate(session.pageId,`async()=>{window.scrollTo(0,document.body.scrollHeight);await new Promise(resolve=>setTimeout(resolve,500));const raw=document.documentElement?.innerHTML||'';const emails=[...new Set(raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi)||[])].join(' ');return{text:(document.body?.innerText||'').replace(/\\s+/g,' ').trim().slice(0,60000),emails,url:location.href,title:document.title}}`);
-    return {...result,text:`${result.text} ${result.emails||''}`.trim(),source:'exact posting rendered in Google Chrome',retrievedAt:new Date().toISOString(),complete:result.text.length>=900}; });
+    const frames=await chrome.evaluateFrames(session.pageId,`async()=>{window.scrollTo(0,document.body?.scrollHeight||0);await new Promise(resolve=>setTimeout(resolve,500));const raw=document.documentElement?.innerHTML||'';const emails=[...new Set(raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi)||[])].join(' ');return{text:(document.body?.innerText||'').replace(/\\s+/g,' ').trim().slice(0,60000),emails,url:location.href,title:document.title}}`);
+    const results=frames.map(frame=>frame?.result).filter(result=>result?.text).sort((a,b)=>b.text.length-a.text.length);
+    if(!results.length) throw new Error('The rendered job page did not expose readable text');
+    const result=results[0],seen=new Set(),parts=[];
+    for(const item of results){const text=`${item.text} ${item.emails||''}`.trim();if(text&&!seen.has(text)){seen.add(text);parts.push(text);}}
+    const combined=parts.join(' ').slice(0,60000);
+    return {...result,text:combined,source:'exact posting rendered in Google Chrome, including embedded frames',retrievedAt:new Date().toISOString(),complete:combined.length>=900}; });
   }
   async function prepareVisibleForm(jobId) { return busy(async()=>{ const session=sessions.get(jobId); if(!session||!await pageExists(session.pageId)) throw new Error('The Google Chrome application tab is no longer open'); return navigateToApplication(session); }); }
   function fail(jobId,error) { const session=sessions.get(jobId); if(session) { clearInterval(session.timer); return set(session,'failed',`Website application preparation failed: ${error.message}`); } }

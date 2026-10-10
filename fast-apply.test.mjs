@@ -140,6 +140,10 @@ test('server retains successful Fast Apply delivery per job and blocks a duplica
   assert.match(source, /websiteApply\.start\(job,null/);
   assert.match(source, /websiteApply\.posting\(job\.id\)/);
   assert.match(source, /website-apply-browser-jd/);
+  assert.match(source, /watchdog probe independent from SQLite/);
+  assert.doesNotMatch(source, /queueExcelMirror|syncExcelMirror|\/api\/sync-excel|Importing Excel tracker|Synchronising SQLite to Excel/);
+  assert.doesNotMatch(source, /This lead is not linked to an Excel tracker row|The linked Excel tracker is unavailable/);
+  assert.match(source, /async function loadDatabase[\s\S]{0,350}jobDb\.repairApplicationStateFromEvents\(\)/);
   const websiteAgent = await readFile(new URL('./website-apply-agent.mjs', import.meta.url), 'utf8');
   assert.match(websiteAgent, /createChromeHelperClient/);
   assert.match(websiteAgent, /chrome\.newPage\(job\.url\)/);

@@ -1,8 +1,7 @@
 import http from 'node:http';
-import { readFile, writeFile, mkdtemp, rm, readdir, stat, rename } from 'node:fs/promises';
+import { readFile, writeFile, rm, readdir, stat, rename } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { basename, dirname, join, extname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -33,10 +32,7 @@ const retiredSourcesPath = join(root, 'retired-job-sources.json');
 const sourceHealthPath = join(root, 'source-health.json');
 const workspace = process.env.ALEX_JOB_DATA_DIR ? resolve(process.env.ALEX_JOB_DATA_DIR) : join(root, 'runtime');
 const statePath = join(workspace, 'State', 'cv_command_center_state.json');
-const trackerImporter = join(root, 'import-tracker.mjs');
-const trackerWorkbook = join(root, 'tracker-workbook.mjs');
 const databaseBackupScript = join(root, 'backup-databases.mjs');
-const trackerImportStatusPath = join(workspace, 'State', 'tracker_import_status.json');
 const liveDatabasePath = join(workspace, 'State', 'live_job_database.json');
 const sqlitePath = join(workspace, 'State', 'job_search.sqlite');
 const emailReconciliationRequestPath = join(workspace, 'State', 'gmail_reconciliation_request.json');
@@ -206,11 +202,9 @@ async function deliverPendingFastApply(pending) {
     if (pendingFastApplySends.get(pending.job.id) === pending) pendingFastApplySends.delete(pending.job.id);
   }
 }
-let importedTracker = { path:'', modified:0 };
 const refreshJobs = new Map();
 let databaseMigrated = false;
 let databaseMigrationRetryAt = 0;
-let excelSyncChain = Promise.resolve();
 const profile = {
   defaultQuery: 'system administrator OR system engineer OR infrastructure engineer OR cloud administrator OR IT operations OR IT consultant',
   searchHeadlines: [
@@ -478,43 +472,6 @@ async function agentJobs({ persist=true } = {}) {
   if (persist) jobDb.importAgentJobs(jobs);
   return jobs;
 }
-async function newestTracker() {
-  const entries = await readdir(workspace, { withFileTypes:true });
-  const candidates = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !/\.xlsx$/i.test(entry.name) || !/tracker|job.?search|shortlist/i.test(entry.name)) continue;
-    const path = join(workspace, entry.name);
-    candidates.push({ path, modified:(await stat(path)).mtimeMs });
-  }
-  const canonical = candidates.find(item => /job_shortlist\.xlsx$/i.test(item.path));
-  return canonical || candidates.sort((a,b) => b.modified-a.modified)[0];
-}
-async function importTrackerIfNeeded() {
-  const tracker = await newestTracker();
-  if (!tracker) return;
-  if (!importedTracker.path && existsSync(trackerImportStatusPath)) {
-    try {
-      const saved = JSON.parse(await readFile(trackerImportStatusPath, 'utf8'));
-      importedTracker = { path:saved.tracker_path || '', modified:Number(saved.modified) || 0 };
-    } catch {}
-  }
-  if (tracker.path === importedTracker.path && Math.abs(tracker.modified - importedTracker.modified) < 1) return;
-  await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [trackerImporter, tracker.path], { windowsHide:true, cwd:root });
-    let error = '';
-    child.stderr.on('data', chunk => error += chunk);
-    child.on('error', reject);
-    child.on('close', code => code === 0 ? resolve() : reject(new Error(error || `Tracker import failed (${code})`)));
-  });
-  importedTracker = tracker;
-}
-async function safeImportTrackerIfNeeded() {
-  try { await importTrackerIfNeeded(); }
-  catch (error) {
-    if (!jobDb.stats().total) throw error;
-    jobDb.setMetadata('last_tracker_import_error', JSON.stringify({ message:conciseChildError(error.message, 'Tracker import deferred'), at:new Date().toISOString() }));
-  }
-}
 async function migrateDatabaseIfNeeded() {
   if (databaseMigrated || Date.now() < databaseMigrationRetryAt) return;
   try {
@@ -536,61 +493,7 @@ async function migrateDatabaseIfNeeded() {
     console.warn('Database maintenance deferred because another local process holds the SQLite write lock.');
   }
 }
-function syncExcelMirror(reason = 'database-update') {
-  const operation = async () => {
-    const tracker = await newestTracker();
-    if (!tracker) throw new Error('The canonical Excel tracker is unavailable');
-    const temp = await mkdtemp(join(tmpdir(), 'job-db-excel-'));
-    const snapshotPath = join(temp, 'snapshot.json');
-    try {
-      const jobs = jobDb.listJobs({ includeInactive:true }).map(assessJob);
-      await writeFile(snapshotPath, JSON.stringify({ updatedAt:new Date().toISOString(), reason, jobs }), 'utf8');
-      await new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [trackerWorkbook, 'sync-database', tracker.path, snapshotPath], { windowsHide:true, cwd:root });
-        let error = '';
-        child.stderr.on('data', chunk => error += chunk);
-        child.on('error', reject);
-        child.on('close', code => code === 0 ? resolve() : reject(new Error(conciseChildError(error, `Excel database sync failed (${code})`))));
-      });
-      const trackerStat = await stat(tracker.path);
-      importedTracker = { path:tracker.path, modified:trackerStat.mtimeMs };
-      let trackerStatus = {};
-      try { trackerStatus = JSON.parse(await readFile(trackerImportStatusPath, 'utf8')); } catch {}
-      await writeFile(trackerImportStatusPath, JSON.stringify({
-        ...trackerStatus,
-        tracker_path:tracker.path,
-        tracker_file:basename(tracker.path),
-        modified:trackerStat.mtimeMs,
-        mirrored_from_sqlite_at:new Date().toISOString(),
-        mirrored_jobs:jobs.length,
-        mirror_reason:reason
-      }, null, 2), 'utf8');
-      jobDb.setMetadata('last_excel_sync', JSON.stringify({ reason, tracker:basename(tracker.path), jobs:jobs.length, syncedAt:new Date().toISOString() }));
-      return { tracker:tracker.path, jobs:jobs.length };
-    } finally { await rm(temp, { recursive:true, force:true }); }
-  };
-  excelSyncChain = excelSyncChain.then(operation, operation);
-  return excelSyncChain;
-}
-function excelSyncInfo() {
-  const metadata = jobDb.getMetadata('last_excel_sync');
-  if (!metadata) return null;
-  try { return { ...JSON.parse(metadata.value), metadataUpdatedAt:metadata.updatedAt }; }
-  catch { return { value:metadata.value, metadataUpdatedAt:metadata.updatedAt }; }
-}
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
-const EXCEL_MIRROR_INTERVAL_MS = THREE_HOURS_MS;
-function excelMirrorIsDue() {
-  const info = excelSyncInfo();
-  return !info?.syncedAt || Date.now() - Date.parse(info.syncedAt) >= EXCEL_MIRROR_INTERVAL_MS;
-}
-function queueExcelMirror(reason='database-update') {
-  jobDb.setMetadata('excel_sync_pending', JSON.stringify({ reason, requestedAt:new Date().toISOString() }));
-  if (!excelMirrorIsDue()) return;
-  setTimeout(() => syncExcelMirror(reason).catch(error => {
-    jobDb.setMetadata('last_excel_sync_error', JSON.stringify({ reason, message:error.message, at:new Date().toISOString() }));
-  }), 0);
-}
 let databaseBackupChain = Promise.resolve();
 function databaseBackupIsDue() {
   const metadata = jobDb.getMetadata('last_database_backup');
@@ -1219,8 +1122,7 @@ async function providerDirectory(query, location) {
 }
 async function search(params, onProgress = () => {}, refreshId = randomUUID(), signal) {
   const throwIfStopped = () => { if (signal?.aborted) throw (signal.reason instanceof Error ? signal.reason : new Error('Live refresh stopped safely after reaching its time limit')); };
-  onProgress({ progress:3, phase:'Importing Excel tracker', completedSources:0, totalSources:0 });
-  await safeImportTrackerIfNeeded();
+  onProgress({ progress:3, phase:'Preparing saved SQLite records', completedSources:0, totalSources:0 });
   throwIfStopped();
   const config = await getConfig();
   const query = params.get('query') || profile.defaultQuery;
@@ -1272,17 +1174,15 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID(), s
   onProgress({ progress:90, phase:'Saving SQLite database', completedSources, totalSources });
   throwIfStopped();
   await writeFile(liveDatabasePath, JSON.stringify(data, null, 2), 'utf8');
-  onProgress({ progress:94, phase:'Synchronising SQLite to Excel', completedSources, totalSources });
-  queueExcelMirror('live-refresh');
+  onProgress({ progress:94, phase:'Finalising SQLite results', completedSources, totalSources });
   onProgress({ progress:100, phase:'Database and website results ready', completedSources, totalSources });
   return data;
 }
 async function loadDatabase(params) {
-  // The saved SQLite state is sufficient to render the dashboard. Tracker
-  // imports and maintenance run only from explicit data workflows, never while
-  // the browser is waiting for its initial dashboard response.
+  // SQLite is the source of truth. Keep this repair bounded so dashboard load
+  // cannot trigger a full migration or network refresh.
+  jobDb.repairApplicationStateFromEvents();
   const saved = (await agentJobs({ persist:false })).filter(isTechnicalRole);
-  if (excelMirrorIsDue()) queueExcelMirror('scheduled-3h');
   if (databaseBackupIsDue()) queueDatabaseBackup('scheduled-3h').catch(() => {});
   let cached = null;
   try { cached = JSON.parse(await readFile(liveDatabasePath, 'utf8')); } catch {}
@@ -1298,7 +1198,7 @@ async function loadDatabase(params) {
   }
   const query = params.get('query') || cached?.query || profile.defaultQuery;
   const location = params.get('location') || cached?.location || 'Germany';
-  return { refreshedAt:cached?.refreshedAt || null, query, location, sourceStatus:jobDb.latestProviderRuns().length ? [{source:'Job Search Agent',status:'ok',count:saved.length}, ...jobDb.latestProviderRuns()] : (cached?.sourceStatus || [{source:'Job Search Agent',status:'ok',count:saved.length}]), directSources:await providerDirectory(query, location), agentLeadCount:saved.length, jobs, databaseStats:jobDb.stats(), savedSearches, activeSavedSearchId, excelSync:excelSyncInfo() };
+  return { refreshedAt:cached?.refreshedAt || null, query, location, sourceStatus:jobDb.latestProviderRuns().length ? [{source:'Job Search Agent',status:'ok',count:saved.length}, ...jobDb.latestProviderRuns()] : (cached?.sourceStatus || [{source:'Job Search Agent',status:'ok',count:saved.length}]), directSources:await providerDirectory(query, location), agentLeadCount:saved.length, jobs, databaseStats:jobDb.stats(), savedSearches, activeSavedSearchId };
 }
 function refreshStatus(job) {
   const elapsedSeconds = Math.max(0, Math.round((Date.now() - job.startedAt) / 1000));
@@ -1370,30 +1270,13 @@ async function updateApplicationStatus(id, applicationStatus) {
   const recordStatusEvent = statusActuallyChanged || missingStatusTimestamp;
   const appliedAt = lead?.applied_at || previous.appliedAt || (appliedStage ? changedAt : null);
   if (!lead) {
-    const databaseJob = jobDb.updateApplication(id, { applicationStatus, lifecycleStatus, applicationStatusChangedAt:recordStatusEvent ? changedAt : previous.applicationStatusChangedAt, appliedAt, recordEvent:recordStatusEvent, previousStatusOverride:statusActuallyChanged ? previous.applicationStatus : '', changeSource:'user' });
-    queueExcelMirror('application-status');
-    return databaseJob;
+    return jobDb.updateApplication(id, { applicationStatus, lifecycleStatus, applicationStatusChangedAt:recordStatusEvent ? changedAt : previous.applicationStatusChangedAt, appliedAt, recordEvent:recordStatusEvent, previousStatusOverride:statusActuallyChanged ? previous.applicationStatus : '', changeSource:'user' });
   }
   const updated = { ...lead, application_status:applicationStatus, application_status_changed_at:recordStatusEvent ? changedAt : (lead.application_status_changed_at || previous.applicationStatusChangedAt || null), applied_at:appliedAt, status:lifecycleStatus, updated_at:changedAt };
   const nextState = { ...state, leads:(state.leads || []).map(item => item.id === id ? updated : item) };
-  if (!lead.tracker_file || !lead.tracker_sheet || !lead.tracker_row) throw new Error('This lead is not linked to an Excel tracker row');
-  const trackerPath = join(workspace, lead.tracker_file);
-  if (!trackerPath.startsWith(workspace) || !existsSync(trackerPath)) throw new Error('The linked Excel tracker is unavailable');
   let databaseJob = jobDb.updateApplication(id, { applicationStatus, lifecycleStatus, applicationStatusChangedAt:updated.application_status_changed_at, appliedAt, recordEvent:recordStatusEvent, previousStatusOverride:statusActuallyChanged ? previous.applicationStatus : '', changeSource:'user' });
-  queueExcelMirror('application-status');
   try { await persistCareerState(nextState); }
   catch (error) { jobDb.setMetadata('last_state_sync_error', JSON.stringify({ operation:'application-status', id, message:error.message, at:new Date().toISOString() })); }
-  const trackerStat = await stat(trackerPath);
-  importedTracker = { path:trackerPath, modified:trackerStat.mtimeMs };
-  await writeFile(trackerImportStatusPath, JSON.stringify({
-    tracker_path:trackerPath,
-    tracker_file:lead.tracker_file,
-    modified:trackerStat.mtimeMs,
-    imported:(state.leads || []).length,
-    skipped:0,
-    imported_at:new Date().toISOString(),
-    last_web_status_update:{ lead_id:id, sheet:lead.tracker_sheet, row:lead.tracker_row, application_status:applicationStatus, updated_at:new Date().toISOString() }
-  }, null, 2), 'utf8');
   return databaseJob;
 }
 async function updateApplicationComment(id, applicationComment) {
@@ -1406,13 +1289,8 @@ async function updateApplicationComment(id, applicationComment) {
   const previous = jobDb.listJobs({ includeInactive:true }).find(job => job.id === id);
   if (!previous) throw new Error('Job was not found in SQLite');
   if (!lead) {
-    const databaseJob = jobDb.updateApplication(id, { applicationComment:comment });
-    queueExcelMirror('application-comment');
-    return databaseJob;
+    return jobDb.updateApplication(id, { applicationComment:comment });
   }
-  if (!lead.tracker_file || !lead.tracker_sheet || !lead.tracker_row) throw new Error('This lead is not linked to an Excel tracker row');
-  const trackerPath = join(workspace, lead.tracker_file);
-  if (!trackerPath.startsWith(workspace) || !existsSync(trackerPath)) throw new Error('The linked Excel tracker is unavailable');
   const updated = { ...lead, application_comment:comment, updated_at:new Date().toISOString() };
   let databaseJob = jobDb.updateApplication(id, { applicationComment:comment });
   const latestState = await getCareerState();
@@ -1420,20 +1298,8 @@ async function updateApplicationComment(id, applicationComment) {
     ...latestState,
     leads:(latestState.leads || []).map(item => item.id === id ? { ...item, application_comment:comment, updated_at:updated.updated_at } : item)
   };
-  queueExcelMirror('application-comment');
   try { await persistCareerState(nextState); }
   catch (error) { jobDb.setMetadata('last_state_sync_error', JSON.stringify({ operation:'application-comment', id, message:error.message, at:new Date().toISOString() })); }
-  const trackerStat = await stat(trackerPath);
-  importedTracker = { path:trackerPath, modified:trackerStat.mtimeMs };
-  await writeFile(trackerImportStatusPath, JSON.stringify({
-    tracker_path:trackerPath,
-    tracker_file:lead.tracker_file,
-    modified:trackerStat.mtimeMs,
-    imported:(state.leads || []).length,
-    skipped:0,
-    imported_at:new Date().toISOString(),
-    last_web_comment_update:{ lead_id:id, sheet:lead.tracker_sheet, row:lead.tracker_row, application_comment:comment, updated_at:new Date().toISOString() }
-  }, null, 2), 'utf8');
   return databaseJob;
 }
 function validatedApplicationUrl(value) {
@@ -1501,7 +1367,6 @@ async function updateApplicationLink(id,value) {
     try { await persistCareerState(nextState); }
     catch(error) { jobDb.setMetadata('last_state_sync_error',JSON.stringify({operation:'application-link',id,message:error.message,at:changedAt})); }
   }
-  queueExcelMirror('application-link');
   return job;
 }
 async function applicationJob(id) {
@@ -1541,7 +1406,6 @@ async function storeRetrievedJobDescription(job, posting, reason='job-descriptio
     } : lead);
     await persistCareerState({ ...state, leads });
   }
-  queueExcelMirror(reason);
   return assessJob(await applicationJob(job.id));
 }
 async function prepareWebsiteApplicationInBackground(job, language='de') {
@@ -1643,7 +1507,9 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ events:await readActivityEvents(activityLogPath, url.searchParams.get('limit')) }));
     }
     if (url.pathname === '/api/health') {
-      const body = JSON.stringify({ ok:true, service:'Alex Job', sqlite:basename(sqlitePath), databaseStats:jobDb.stats(), excelSync:excelSyncInfo(), time:new Date().toISOString() });
+      // Keep the watchdog probe independent from SQLite. A short database lock
+      // must not make the watchdog kill an otherwise healthy application.
+      const body = JSON.stringify({ ok:true, service:'Alex Job', sqlite:basename(sqlitePath), uptimeSeconds:Math.round(process.uptime()), time:new Date().toISOString() });
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(body);
     }
@@ -1831,11 +1697,6 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
       return res.end(JSON.stringify({ok:true,session,job}));
     }
-    if (url.pathname === '/api/sync-excel' && req.method === 'POST') {
-      const result = await syncExcelMirror('manual-sync');
-      res.writeHead(200, {'content-type':'application/json','cache-control':'no-store'});
-      return res.end(JSON.stringify({ ok:true, ...result, excelSync:excelSyncInfo() }));
-    }
     const requestPath = url.pathname === '/' ? '/index.html' : url.pathname;
     const safePath = join(root, requestPath.replace(/^\/+/, ''));
     if (!safePath.startsWith(root)) throw new Error('Invalid path');
@@ -1878,6 +1739,5 @@ async function restartWhenApplicationCodeChanges() {
 }
 setInterval(() => restartWhenApplicationCodeChanges().catch(error => console.error('Source change check failed:',error.message)),15000).unref();
 setInterval(() => {
-  if (excelMirrorIsDue()) queueExcelMirror('scheduled-3h');
   if (databaseBackupIsDue()) queueDatabaseBackup('scheduled-3h').catch(() => {});
 }, 60 * 60 * 1000).unref();

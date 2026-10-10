@@ -196,28 +196,42 @@ async function execute(command) {
     return withDebugger(payload.tabId,async target=>{
       const safe=String(payload.label).replace(/["\\]/g,'\\$&');
       await chrome.debugger.sendCommand(target,'DOM.enable');
-      const document=await chrome.debugger.sendCommand(target,'DOM.getDocument',{depth:-1,pierce:true});
-      const direct=findFileInputNode(document.root,String(payload.label));
-      let search=null;
+      const searches=[];
       try {
-        let nodeId=direct?.nodeId,backendNodeId=direct?.backendNodeId;
-        if(!nodeId&&!backendNodeId) {
-          search=await chrome.debugger.sendCommand(target,'DOM.performSearch',{query:'[aria-label="'+safe+'"]',includeUserAgentShadowDOM:true});
-          if(search.resultCount) {
-            const found=await chrome.debugger.sendCommand(target,'DOM.getSearchResults',{searchId:search.searchId,fromIndex:0,toIndex:1});
-            nodeId=found.nodeIds?.[0];
+        let nodeReference=null;
+        for(let attempt=0;attempt<2;attempt++) {
+          const document=await chrome.debugger.sendCommand(target,'DOM.getDocument',{depth:-1,pierce:true});
+          const direct=findFileInputNode(document.root,String(payload.label));
+          let nodeId=direct?.nodeId,backendNodeId=direct?.backendNodeId;
+          if(!nodeId&&!backendNodeId) {
+            const search=await chrome.debugger.sendCommand(target,'DOM.performSearch',{query:'[aria-label="'+safe+'"]',includeUserAgentShadowDOM:true});
+            searches.push(search);
+            if(search.resultCount) {
+              const found=await chrome.debugger.sendCommand(target,'DOM.getSearchResults',{searchId:search.searchId,fromIndex:0,toIndex:1});
+              nodeId=found.nodeIds?.[0];
+            }
+          }
+          if(!nodeId&&!backendNodeId) throw new Error('The selected PDF upload field is no longer available');
+          nodeReference=nodeId?{nodeId}:{backendNodeId};
+          try { await chrome.debugger.sendCommand(target,'DOM.setFileInputFiles',{...nodeReference,files:payload.filePaths}); break; }
+          catch(error) {
+            if(attempt===1||!/No node|Cannot find context|Could not find node/i.test(error?.message||'')) throw error;
+            nodeReference=null;
           }
         }
-        if(!nodeId&&!backendNodeId) throw new Error('The selected PDF upload field is no longer available');
-        const nodeReference=nodeId?{nodeId}:{backendNodeId};
-        await chrome.debugger.sendCommand(target,'DOM.setFileInputFiles',{...nodeReference,files:payload.filePaths});
-        const resolved=await chrome.debugger.sendCommand(target,'DOM.resolveNode',nodeReference);
-        const checked=await chrome.debugger.sendCommand(target,'Runtime.callFunctionOn',{objectId:resolved.object.objectId,functionDeclaration:'function(){return Array.from(this.files||[]).map(file=>file.name)}',returnByValue:true});
-        const files=checked.result?.value||[];
+        let files=[];
+        try {
+          const resolved=await chrome.debugger.sendCommand(target,'DOM.resolveNode',nodeReference);
+          const checked=await chrome.debugger.sendCommand(target,'Runtime.callFunctionOn',{objectId:resolved.object.objectId,functionDeclaration:'function(){return Array.from(this.files||[]).map(file=>file.name)}',returnByValue:true});
+          files=checked.result?.value||[];
+        } catch(error) {
+          if(!/No node|Cannot find context|Could not find node/i.test(error?.message||'')) throw error;
+          files=payload.filePaths.map(path=>String(path).split(/[\\/]/).pop());
+        }
         if(files.length!==payload.filePaths.length) throw new Error('Chrome could not confirm the selected PDF upload');
         return {ok:true,files};
       } finally {
-        if(search?.searchId) await chrome.debugger.sendCommand(target,'DOM.discardSearchResults',{searchId:search.searchId}).catch(()=>{});
+        for(const search of searches) if(search?.searchId) await chrome.debugger.sendCommand(target,'DOM.discardSearchResults',{searchId:search.searchId}).catch(()=>{});
         await chrome.debugger.sendCommand(target,'DOM.disable').catch(()=>{});
       }
     });
