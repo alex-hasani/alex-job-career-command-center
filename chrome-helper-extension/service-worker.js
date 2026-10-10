@@ -140,7 +140,7 @@ function findFileInputNode(root,label) {
   const pending=[root];
   while(pending.length) {
     const node=pending.shift();
-    if(String(node?.nodeName||'').toUpperCase()==='INPUT'&&nodeAttribute(node,'aria-label')===label) return node;
+    if(String(node?.nodeName||'').toUpperCase()==='INPUT'&&String(nodeAttribute(node,'type')).toLowerCase()==='file'&&nodeAttribute(node,'aria-label')===label) return node;
     for(const child of node?.children||[]) pending.push(child);
     for(const shadow of node?.shadowRoots||[]) pending.push(shadow);
     for(const pseudo of node?.pseudoElements||[]) pending.push(pseudo);
@@ -149,6 +149,37 @@ function findFileInputNode(root,label) {
     if(node?.importedDocument) pending.push(node.importedDocument);
   }
   return null;
+}
+
+function replacementFileInputNode(root,payload={}) {
+  const pending=[root],candidates=[];
+  while(pending.length) {
+    const node=pending.shift();
+    if(String(node?.nodeName||'').toUpperCase()==='INPUT'&&String(nodeAttribute(node,'type')).toLowerCase()==='file') candidates.push(node);
+    for(const child of node?.children||[]) pending.push(child);
+    for(const shadow of node?.shadowRoots||[]) pending.push(shadow);
+    if(node?.contentDocument) pending.push(node.contentDocument);
+  }
+  if(!candidates.length) return null;
+  const kind=String((payload.kinds||[]).join(' ')).toLowerCase();
+  const words=kind==='cv'?/cv|resume|lebenslauf/:kind==='letter'?/cover|letter|anschreiben|motivation/:/zeugnis|certificate|reference/;
+  const semantic=candidates.filter(node=>words.test(['id','name','aria-label','title','data-testid'].map(name=>nodeAttribute(node,name)).join(' ').toLowerCase()));
+  if(semantic.length===1) return semantic[0];
+  const pdf=candidates.filter(node=>/pdf/i.test(nodeAttribute(node,'accept')));
+  if(pdf.length===1) return pdf[0];
+  return candidates.length===1?candidates[0]:null;
+}
+
+async function revealUploadTarget(tabId,kinds=[]) {
+  const wanted=JSON.stringify(kinds);
+  const scan=`()=>{const kinds=${wanted};const normal=value=>String(value||'').toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim();const kind=kinds.join(' ').toLowerCase();const subject=kind==='cv'?/\\b(?:cv|resume|lebenslauf)\\b/i:kind==='letter'?/cover|letter|anschreiben|motivation/i:/zeugnis|certificate|reference/i;const action=/upload|hochladen|datei|document/i;const blocked=/submit|absenden|einreichen|apply now|jetzt bewerben|weiter|next|continue/i;const roots=[document];for(let i=0;i<roots.length;i++)for(const node of roots[i].querySelectorAll('*'))if(node.shadowRoot)roots.push(node.shadowRoot);const controls=[];for(const root of roots)controls.push(...root.querySelectorAll('button,input[type="button"],a,[role="button"],label[for]'));const candidates=[...new Set(controls)].map((node,index)=>{const text=normal(node.innerText||node.textContent||node.value||node.getAttribute('aria-label')||node.getAttribute('title'));if(!text||blocked.test(text)||!subject.test(text)||!action.test(text)||node.disabled||node.getAttribute('aria-disabled')==='true'||!(node.offsetWidth||node.offsetHeight||node.getClientRects().length))return null;return{index,text,score:150-text.length}}).filter(Boolean).sort((a,b)=>b.score-a.score);return candidates[0]||null}`;
+  const frames=await runInFrames(tabId,scan),chosen=frames.filter(item=>item.result).sort((a,b)=>b.result.score-a.result.score)[0];
+  if(!chosen) return false;
+  const click=`()=>{const roots=[document];for(let i=0;i<roots.length;i++)for(const node of roots[i].querySelectorAll('*'))if(node.shadowRoot)roots.push(node.shadowRoot);const controls=[];for(const root of roots)controls.push(...root.querySelectorAll('button,input[type="button"],a,[role="button"],label[for]'));const node=[...new Set(controls)][${chosen.result.index}];if(!node)return false;node.scrollIntoView({block:'center',inline:'center'});node.click();return true}`;
+  const clicked=await chrome.scripting.executeScript({target:{tabId,frameIds:[chosen.frameId]},world:'MAIN',func:async source=>{const fn=(0,eval)('('+source+')');return await fn();},args:[click]});
+  if(!clicked[0]?.result) return false;
+  await new Promise(resolve=>setTimeout(resolve,600));
+  return true;
 }
 
 async function execute(command) {
@@ -201,7 +232,7 @@ async function execute(command) {
         let nodeReference=null;
         for(let attempt=0;attempt<2;attempt++) {
           const document=await chrome.debugger.sendCommand(target,'DOM.getDocument',{depth:-1,pierce:true});
-          const direct=findFileInputNode(document.root,String(payload.label));
+          const direct=findFileInputNode(document.root,String(payload.label))||replacementFileInputNode(document.root,payload);
           let nodeId=direct?.nodeId,backendNodeId=direct?.backendNodeId;
           if(!nodeId&&!backendNodeId) {
             const search=await chrome.debugger.sendCommand(target,'DOM.performSearch',{query:'[aria-label="'+safe+'"]',includeUserAgentShadowDOM:true});
@@ -211,7 +242,8 @@ async function execute(command) {
               nodeId=found.nodeIds?.[0];
             }
           }
-          if(!nodeId&&!backendNodeId) throw new Error('The selected PDF upload field is no longer available');
+          if(!nodeId&&!backendNodeId&&attempt===0&&await revealUploadTarget(payload.tabId,payload.kinds)) continue;
+          if(!nodeId&&!backendNodeId) throw new Error('The PDF upload control did not expose an available file field');
           nodeReference=nodeId?{nodeId}:{backendNodeId};
           try { await chrome.debugger.sendCommand(target,'DOM.setFileInputFiles',{...nodeReference,files:payload.filePaths}); break; }
           catch(error) {

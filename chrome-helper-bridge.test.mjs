@@ -34,6 +34,9 @@ test('Chrome helper searches embedded frames and clicks only the chosen applicat
   assert.match(source,/clickAdvanceTarget/);
   assert.ok(source.indexOf("'DOM.enable'")<source.indexOf("'DOM.getDocument'"));
   assert.match(source,/findFileInputNode/);
+  assert.match(source,/replacementFileInputNode/);
+  assert.match(source,/revealUploadTarget/);
+  assert.match(source,/payload\.kinds/);
   assert.match(source,/node\?\.contentDocument/);
   assert.match(source,/node\?\.shadowRoots/);
   assert.match(source,/backendNodeId/);
@@ -41,7 +44,7 @@ test('Chrome helper searches embedded frames and clicks only the chosen applicat
   assert.match(source,/Cannot find context/);
   assert.match(agent,/posting[\s\S]+evaluateFrames/);
   assert.match(agent,/including embedded frames/);
-  assert.match(manifest,/"version": "1\.2\.1"/);
+  assert.match(manifest,/"version": "1\.2\.2"/);
 });
 
 test('Chrome helper exposes a safe current-page retry action', async () => {

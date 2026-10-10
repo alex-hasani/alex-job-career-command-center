@@ -218,7 +218,7 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     for(const upload of result.uploads||[]) {
       const tree=await chrome.tool('take_snapshot',{pageId,verbose:true}),uid=uploadUid(tree,upload.label); if(!uid) continue;
       const paths=upload.kinds.map(kind=>files[kind]);
-      const uploaded=await chrome.tool('upload_file',{pageId,uid,filePaths:paths});
+      const uploaded=await chrome.tool('upload_file',{pageId,uid,filePaths:paths,kinds:upload.kinds,identity:upload.identity});
       if(!uploadWasConfirmed(uploaded,paths.length)) throw new Error(`Chrome did not verify the ${upload.kinds.join(' and ')} PDF upload`);
       upload.kinds.forEach((kind,index)=>{uploadedFileKinds.add(kind);uploadedFilePaths.add(paths[index]);result.assigned.push(`${kind} PDF`)});
     }

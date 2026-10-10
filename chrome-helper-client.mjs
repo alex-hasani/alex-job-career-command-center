@@ -56,7 +56,7 @@ export function createChromeHelperClient(channel='default') {
       return textResult(result?.ok?`Clicked Next control: ${result.text||''}`:'No Next control found',result);
     }
     if(name==='upload_file') {
-      const result=await send('upload',{tabId:Number(args.pageId),label:String(args.uid||''),filePaths:args.filePaths||[]},timeout);
+      const result=await send('upload',{tabId:Number(args.pageId),label:String(args.uid||''),filePaths:args.filePaths||[],kinds:args.kinds||[],identity:args.identity||{}},timeout);
       return textResult('Uploaded '+(result?.files?.length||0)+' file(s)',result);
     }
     throw new Error('Unsupported Chrome helper action: '+name);
