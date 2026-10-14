@@ -11,6 +11,7 @@ import {
   Paragraph,
   TextRun,
 } from 'docx';
+import JSZip from 'jszip';
 import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
 
 const MAX_JD_LENGTH = 45000;
@@ -490,7 +491,7 @@ function formatEnglishDate(date=new Date()) {
   return new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'long', year:'numeric', timeZone:'Europe/Berlin' }).format(date);
 }
 
-function draftLetter(job, posting, languagePreference) {
+export function buildCoverLetter(job, posting, languagePreference) {
   const preference = String(languagePreference || '').toLowerCase();
   if (!['de','en'].includes(preference)) throw new Error('Choose German or English before generating the cover letter');
   const language = preference;
@@ -606,10 +607,13 @@ export function buildResume(job, posting, language='de') {
   const definition = clusterDefinitions[cluster];
   const tokens = jdTokens(posting.text);
   const skills = definition.order.map(id => profile.skills.find(group => group.id === id)).filter(Boolean);
-  const roleLimits = { 'current-infrastructure':5, 'global-operations':5, 'regional-operations':3, 'cloud-lead':cluster === 'azure' || cluster === 'lead' ? 5 : 3, 'platform-operations':2, 'm365-support':cluster === 'microsoft' ? 2 : 1 };
-  const roles = profile.roles.map(role => ({ ...role, selectedBullets:topBullets(role,tokens,cluster,roleLimits[role.id] || 2) }));
-  const allSelected = roles.flatMap(role => role.selectedBullets.map(bullet => ({ role, bullet, score:bulletRelevance(bullet,tokens,cluster) })));
-  const keyQualifications = allSelected.sort((a,b) => b.score - a.score).slice(0,5).map(item => item.bullet[language]);
+  const roleLimits = { 'current-infrastructure':4, 'global-operations':3, 'regional-operations':2, 'cloud-lead':cluster === 'azure' || cluster === 'lead' ? 4 : 2, 'platform-operations':1, 'm365-support':1 };
+  const selectedRoles = profile.roles.map(role => ({ ...role, selectedBullets:topBullets(role,tokens,cluster,roleLimits[role.id] || 2) }));
+  const allSelected = selectedRoles.flatMap(role => role.selectedBullets.map(bullet => ({ role, bullet, score:bulletRelevance(bullet,tokens,cluster) })));
+  const qualificationBullets = allSelected.sort((a,b) => b.score - a.score).slice(0,3).map(item => item.bullet);
+  const keyQualifications = qualificationBullets.map(bullet => bullet[language]);
+  const qualificationSet = new Set(qualificationBullets);
+  const roles = selectedRoles.map(role => ({ ...role, selectedBullets:role.selectedBullets.filter(bullet => !qualificationSet.has(bullet)) }));
   const requirements = salientRequirements(posting.text, language);
   const labels = resumeSectionLabels(language);
   const familiarities = matchingFamiliarities(profile, tokens);
@@ -666,6 +670,22 @@ function paragraphsFromBody(body) {
   return String(body || '').replace(/\r\n?/g, '\n').split(/\n\s*\n/).map(value => value.trim()).filter(Boolean);
 }
 
+async function applicationDocxBuffer(document) {
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(document));
+  for (const name of Object.keys(zip.files)) {
+    if (/^word\/comments[^/]*\.xml$/i.test(name) || /^word\/_rels\/comments[^/]*\.xml\.rels$/i.test(name)) zip.remove(name);
+  }
+  for (const name of ['[Content_Types].xml','word/_rels/document.xml.rels']) {
+    const entry = zip.file(name);
+    if (!entry) continue;
+    let xml = await entry.async('string');
+    if (name === '[Content_Types].xml') xml = xml.replace(/<Override\b[^>]*PartName="\/word\/comments[^\"]*"[^>]*\/>/gi,'');
+    else xml = xml.replace(/<Relationship\b[^>]*Type="[^"]*\/comments(?:Extended|Ids)?"[^>]*\/>/gi,'');
+    zip.file(name,xml);
+  }
+  return zip.generateAsync({ type:'nodebuffer', compression:'DEFLATE' });
+}
+
 async function createDocx(packageData, outputPath) {
   const letter = packageData.letter;
   const bodyParts = paragraphsFromBody(letter.body);
@@ -686,10 +706,11 @@ async function createDocx(packageData, outputPath) {
     children:[new TextRun({ text, bold:index === bodyParts.length - 1, size:20, font:'Arial' })]
   })));
   const doc = new Document({
+    creator:'', lastModifiedBy:'', description:'', keywords:'',
     styles:{ default:{ document:{ run:{ font:'Arial', size:20 }, paragraph:{ spacing:{ line:276 } } } } },
     sections:[{ properties:{ page:{ margin:{ top:900, right:1040, bottom:900, left:1040 } } }, children }]
   });
-  await writeFile(outputPath, await Packer.toBuffer(doc));
+  await writeFile(outputPath, await applicationDocxBuffer(doc));
 }
 
 function resumeParagraphs(body) {
@@ -712,10 +733,11 @@ function resumeParagraphs(body) {
 
 async function createResumeDocx(resume, outputPath) {
   const doc = new Document({
+    creator:'', lastModifiedBy:'', description:'', keywords:'',
     styles:{ default:{ document:{ run:{ font:'Arial', size:18 }, paragraph:{ spacing:{ line:240 } } } } },
     sections:[{ properties:{ page:{ margin:{ top:700, right:850, bottom:700, left:850 } } }, children:resumeParagraphs(resume.body) }]
   });
-  await writeFile(outputPath, await Packer.toBuffer(doc));
+  await writeFile(outputPath, await applicationDocxBuffer(doc));
 }
 
 function htmlEscape(value='') {
@@ -759,7 +781,7 @@ async function createPdf(packageData, outputPath) {
   try {
     const page = await browser.newPage();
     await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
-      @page{size:A4;margin:18mm 20mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:10.5pt/1.45 Arial,sans-serif}h1{margin:0;font-size:17pt}h2{margin:2mm 0 1.5mm;color:#245684;font-size:11pt}header p{margin:0 0 1mm;font-size:9.5pt}.date{margin:8mm 0 4mm;color:#555}.subject{margin:0 0 6mm;font-weight:700;font-size:11.5pt}.letter p{margin:0 0 4.5mm;white-space:pre-wrap}.letter p:last-child{font-weight:700}</style></head><body>
+      @page{size:A4;margin:16mm 20mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:10pt/1.4 Arial,sans-serif}h1{margin:0;font-size:16.5pt}h2{margin:1.8mm 0 1.2mm;color:#245684;font-size:10.5pt;line-height:1.25}header p{margin:0 0 .8mm;font-size:9pt}.date{margin:6mm 0 3.5mm;color:#555}.subject{margin:0 0 5mm;font-weight:700;font-size:11pt}.letter p{margin:0 0 3.8mm;white-space:pre-wrap}.letter p:last-child{font-weight:700}</style></head><body>
       <header><h1>${htmlEscape(canonicalResumeProfile.identity.name)}</h1><h2>${htmlEscape(canonicalResumeProfile.baseHeadline[letter.language])}</h2><p>${htmlEscape(`${canonicalResumeProfile.identity.location} | ${canonicalResumeProfile.identity.phone} | ${canonicalResumeProfile.identity.email}`)}</p><p>${htmlEscape(`LinkedIn: ${canonicalResumeProfile.identity.linkedin} | GitHub: ${canonicalResumeProfile.identity.github}`)}</p></header>
       <p class="date">${htmlEscape(letter.date)}</p><p class="subject">${htmlEscape(letter.subject)}</p><div class="letter">${paragraphs.map(text => `<p>${htmlEscape(text)}</p>`).join('')}</div>
       </body></html>`, { waitUntil:'load' });
@@ -851,7 +873,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
   function createVersion(job, posting, versionNumber, reason='full') {
     const folder = versionFolder(job, versionNumber);
     const resumes = { de:buildResume(job, posting, 'de'), en:buildResume(job, posting, 'en') };
-    const letters = { de:draftLetter(job, posting, 'de'), en:draftLetter(job, posting, 'en') };
+    const letters = { de:buildCoverLetter(job, posting, 'de'), en:buildCoverLetter(job, posting, 'en') };
     const remarks = { de:buildApplicationRemarks(job, posting, 'de'), en:buildApplicationRemarks(job, posting, 'en') };
     for (const language of ['de','en']) {
       const cvFileName = compactDocumentFileName(job,versionNumber,'cv',language,'docx');
