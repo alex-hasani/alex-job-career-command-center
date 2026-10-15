@@ -104,6 +104,13 @@ test('portal remarks stay concise, job-specific and evidence-grounded', () => {
   assert.equal(/salary|gehalt|start date|eintritt/i.test(`${de.body} ${en.body}`),false);
 });
 
+test('every tailored role keeps at least one concise evidence line', () => {
+  const dataCentrePosting = { text:'Operate Windows Server, Active Directory, VMware, backup and recovery in data centre environments with 2nd and 3rd level troubleshooting.' };
+  const resume = buildResume(job,dataCentrePosting,'en');
+  assert.ok(resume.roles.every(role => role.selectedBullets.length >= 1));
+  assert.ok(resume.roles.length >= 3);
+});
+
 test('application recommendations guide without blocking user choice', async () => {
   const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
   assert.match(html, /\["Rejected","Withdrawn","Case Closed"\]\.includes\(j\.applicationStatus\) \? " disabled" : ""/);

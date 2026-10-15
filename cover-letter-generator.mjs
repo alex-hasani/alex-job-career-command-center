@@ -635,7 +635,11 @@ export function buildResume(job, posting, language='de') {
   const qualificationBullets = allSelected.sort((a,b) => b.score - a.score).slice(0,3).map(item => item.bullet);
   const keyQualifications = qualificationBullets.map(bullet => bullet[language]);
   const qualificationSet = new Set(qualificationBullets);
-  const roles = selectedRoles.map(role => ({ ...role, selectedBullets:role.selectedBullets.filter(bullet => !qualificationSet.has(bullet)) }));
+  const roles = selectedRoles.map(role => {
+    const distinctBullets=role.selectedBullets.filter(bullet => !qualificationSet.has(bullet));
+    const fallback=role.bullets.find(bullet => !qualificationSet.has(bullet)) || role.selectedBullets[0] || role.bullets[0];
+    return { ...role, selectedBullets:distinctBullets.length ? distinctBullets : (fallback ? [fallback] : []) };
+  });
   const requirements = salientRequirements(posting.text, language);
   const labels = resumeSectionLabels(language);
   const familiarities = matchingFamiliarities(profile, tokens);
