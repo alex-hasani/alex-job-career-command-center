@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, profileFromCanonical, refineResumeEvidence } from './user-space.mjs';
+import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, profileFromCanonical, readMobileDownloadRegistry, refineResumeEvidence } from './user-space.mjs';
 
 test('passwords use salted scrypt hashes and verify without storing plaintext', async () => {
   const password = 'Correct horse battery staple 2026';
@@ -52,6 +52,24 @@ test('personal Chrome helper exports are valid distinct ZIP bundles', () => {
   assert.equal(first.readUInt32LE(first.length-22),0x06054b50);
   assert.notDeepEqual(first,second);
   assert.match(first.toString('utf8'),/profile-config\.js/);
+});
+
+test('mobile download registry exposes only existing files inside the private workspace', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'alex-job-mobile-downloads-'));
+  const packs=join(directory,'packs'),registry=join(directory,'mobile-downloads.json');
+  await import('node:fs/promises').then(({mkdir})=>mkdir(packs,{recursive:true}));
+  await writeFile(join(packs,'pack.zip'),'portable zip test');
+  await writeFile(registry,JSON.stringify({files:[
+    {id:'master-pack',relativePath:'packs/pack.zip',downloadName:'Master_Pack.zip',label:'Master pack',contentType:'application/zip'},
+    {id:'escape',relativePath:'../outside.zip',downloadName:'outside.zip'}
+  ]}));
+  try {
+    const files=await readMobileDownloadRegistry(directory,registry);
+    assert.equal(files.length,1);
+    assert.equal(files[0].id,'master-pack');
+    assert.equal(files[0].downloadUrl,'/api/user-space/mobile-downloads/master-pack');
+    assert.equal(files[0].byteSize,17);
+  } finally { await rm(directory,{recursive:true,force:true}); }
 });
 
 test('ATS refinement prioritizes only source evidence and keeps missing terms review-only', () => {

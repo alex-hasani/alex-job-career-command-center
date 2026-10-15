@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scrypt = promisify(scryptCallback);
@@ -334,7 +334,28 @@ function publicDocument(row) {
   return row ? { id:row.id, kind:row.kind, originalName:row.original_name, mimeType:row.mime_type, byteSize:row.byte_size, sha256:row.sha256, createdAt:row.created_at, extractedCharacters:String(row.extracted_text || '').length, downloadUrl:`/api/user-space/documents/${row.id}` } : null;
 }
 
-export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json') }) {
+export async function readMobileDownloadRegistry(workspace, registryPath=join(workspace,'State','mobile-downloads.json')) {
+  let parsed;
+  try { parsed=JSON.parse(await readFile(registryPath,'utf8')); }
+  catch { return []; }
+  const root=resolve(workspace),items=Array.isArray(parsed?.files)?parsed.files:[];
+  const downloads=[];
+  for(const item of items.slice(0,50)) {
+    const id=String(item?.id||'').trim();
+    const relativePath=String(item?.relativePath||'').trim();
+    if(!/^[a-z0-9][a-z0-9._-]{1,79}$/i.test(id)||!relativePath||isAbsolute(relativePath)) continue;
+    const path=resolve(root,relativePath),within=path===root||path.startsWith(root+sep);
+    if(!within) continue;
+    let fileStat;
+    try { fileStat=await stat(path); } catch { continue; }
+    if(!fileStat.isFile()) continue;
+    const downloadName=basename(String(item.downloadName||basename(path))).replace(/["\r\n]/g,'').slice(0,180)||basename(path);
+    downloads.push({id,label:String(item.label||downloadName).replace(/\s+/g,' ').trim().slice(0,120),downloadName,contentType:String(item.contentType||'application/octet-stream').slice(0,100),path,byteSize:fileStat.size,downloadUrl:`/api/user-space/mobile-downloads/${encodeURIComponent(id)}`});
+  }
+  return downloads;
+}
+
+export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json') }) {
   const db = openUserSpaceDatabase(databasePath);
   if(protectedAdminProfile) {
     const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
@@ -535,6 +556,21 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     res.end(content);
   }
 
+  async function listMobileDownloads(req,res) {
+    requireSession(req);
+    const files=(await readMobileDownloadRegistry(workspace,mobileDownloadsPath)).map(({path,...item})=>item);
+    sendJson(res,200,{ok:true,files});
+  }
+
+  async function downloadMobileFile(req,res,id) {
+    requireSession(req);
+    const file=(await readMobileDownloadRegistry(workspace,mobileDownloadsPath)).find(item=>item.id===id);
+    if(!file) throw httpError(404,'The requested download is unavailable.','DOWNLOAD_NOT_FOUND');
+    const content=await readFile(file.path);
+    res.writeHead(200,securityHeaders({'content-type':file.contentType,'content-disposition':`attachment; filename="${file.downloadName}"`,'content-length':content.length,'cache-control':'private, no-store'}));
+    res.end(content);
+  }
+
   function profileFor(userId) {
     const row=db.prepare('SELECT profile_json FROM application_profiles WHERE user_id=?').get(userId);
     return row ? JSON.parse(row.profile_json) : {};
@@ -673,6 +709,10 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         const session = rawSession(req);
         if (!session) sendJson(res, 200, { authenticated:false });
         else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), documents:documentsFor(session.row.user_id), skills:skillsFor(session.row.user_id), libraryError:session.row.user_id===protectedAdminId()?assets.error:'', applicationProfile:profileFor(session.row.user_id) });
+      } else if (url.pathname === '/api/user-space/mobile-downloads' && req.method === 'GET') {
+        await listMobileDownloads(req,res);
+      } else if (url.pathname.startsWith('/api/user-space/mobile-downloads/') && req.method === 'GET') {
+        await downloadMobileFile(req,res,decodeURIComponent(url.pathname.slice('/api/user-space/mobile-downloads/'.length)));
       } else if (url.pathname.startsWith('/api/user-space/documents/') && req.method === 'GET') {
         await downloadDocument(req,res,decodeURIComponent(url.pathname.slice('/api/user-space/documents/'.length)));
       } else if (url.pathname === '/api/user-space/resume' && req.method === 'POST') await uploadResume(req, res);
