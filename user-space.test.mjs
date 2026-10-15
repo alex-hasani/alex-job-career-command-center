@@ -60,7 +60,7 @@ test('mobile download registry exposes only existing files inside the private wo
   await import('node:fs/promises').then(({mkdir})=>mkdir(packs,{recursive:true}));
   await writeFile(join(packs,'pack.zip'),'portable zip test');
   await writeFile(registry,JSON.stringify({files:[
-    {id:'master-pack',relativePath:'packs/pack.zip',downloadName:'Master_Pack.zip',label:'Master pack',contentType:'application/zip'},
+    {id:'master-pack',relativePath:'packs/pack.zip',downloadName:'Master_Pack.zip',label:'Master pack',contentType:'application/zip',tokenSha256:'a'.repeat(64),tokenExpiresAt:'2099-01-01T00:00:00.000Z'},
     {id:'escape',relativePath:'../outside.zip',downloadName:'outside.zip'}
   ]}));
   try {
@@ -69,6 +69,7 @@ test('mobile download registry exposes only existing files inside the private wo
     assert.equal(files[0].id,'master-pack');
     assert.equal(files[0].downloadUrl,'/api/user-space/mobile-downloads/master-pack');
     assert.equal(files[0].byteSize,17);
+    assert.equal(files[0].tokenSha256,'a'.repeat(64));
   } finally { await rm(directory,{recursive:true,force:true}); }
 });
 

@@ -350,7 +350,9 @@ export async function readMobileDownloadRegistry(workspace, registryPath=join(wo
     try { fileStat=await stat(path); } catch { continue; }
     if(!fileStat.isFile()) continue;
     const downloadName=basename(String(item.downloadName||basename(path))).replace(/["\r\n]/g,'').slice(0,180)||basename(path);
-    downloads.push({id,label:String(item.label||downloadName).replace(/\s+/g,' ').trim().slice(0,120),downloadName,contentType:String(item.contentType||'application/octet-stream').slice(0,100),path,byteSize:fileStat.size,downloadUrl:`/api/user-space/mobile-downloads/${encodeURIComponent(id)}`});
+    const tokenSha256=/^[a-f0-9]{64}$/i.test(String(item.tokenSha256||''))?String(item.tokenSha256).toLowerCase():'';
+    const tokenExpiresAt=String(item.tokenExpiresAt||'');
+    downloads.push({id,label:String(item.label||downloadName).replace(/\s+/g,' ').trim().slice(0,120),downloadName,contentType:String(item.contentType||'application/octet-stream').slice(0,100),path,byteSize:fileStat.size,downloadUrl:`/api/user-space/mobile-downloads/${encodeURIComponent(id)}`,tokenSha256,tokenExpiresAt});
   }
   return downloads;
 }
@@ -558,14 +560,17 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
 
   async function listMobileDownloads(req,res) {
     requireSession(req);
-    const files=(await readMobileDownloadRegistry(workspace,mobileDownloadsPath)).map(({path,...item})=>item);
+    const files=(await readMobileDownloadRegistry(workspace,mobileDownloadsPath)).map(({path,tokenSha256,tokenExpiresAt,...item})=>item);
     sendJson(res,200,{ok:true,files});
   }
 
   async function downloadMobileFile(req,res,id) {
-    requireSession(req);
     const file=(await readMobileDownloadRegistry(workspace,mobileDownloadsPath)).find(item=>item.id===id);
     if(!file) throw httpError(404,'The requested download is unavailable.','DOWNLOAD_NOT_FOUND');
+    const suppliedToken=new URL(req.url,'http://localhost').searchParams.get('token')||'';
+    const suppliedHash=createHash('sha256').update(suppliedToken).digest('hex');
+    const tokenValid=Boolean(file.tokenSha256&&file.tokenExpiresAt&&Date.parse(file.tokenExpiresAt)>Date.now()&&timingSafeEqual(Buffer.from(suppliedHash,'hex'),Buffer.from(file.tokenSha256,'hex')));
+    if(!tokenValid) requireSession(req);
     const content=await readFile(file.path);
     res.writeHead(200,securityHeaders({'content-type':file.contentType,'content-disposition':`attachment; filename="${file.downloadName}"`,'content-length':content.length,'cache-control':'private, no-store'}));
     res.end(content);
