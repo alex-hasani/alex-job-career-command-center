@@ -5,6 +5,10 @@
 // application outcomes. Replace this object locally with your own verified data
 // and never commit that private file.
 export const canonicalResumeProfile = {
+  documentMetadata: {
+    author: 'Jordan Example',
+    creator: 'Microsoft Word'
+  },
   identity: {
     name: 'Jordan Example',
     location: 'Stuttgart Region, Germany',

@@ -17,6 +17,7 @@
     "chrome-devtools-mcp": "^1.10.1",
     "docx": "^9.5.1",
     "jszip": "3.10.1",
+    "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.3.289",
     "playwright": "1.62.1"
   }
