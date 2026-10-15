@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { buildApplicationRemarks, buildResume, compactDocumentFileName } from './cover-letter-generator.mjs';
+import { buildApplicationRemarks, buildCoverLetter, buildResume, compactDocumentFileName } from './cover-letter-generator.mjs';
 
 const job = { company:'Test Employer', title:'Senior Hybrid Infrastructure Engineer', location:'Stuttgart' };
 const posting = {
@@ -64,6 +64,17 @@ test('candidate facts remain stable while emphasis changes', () => {
   assert.notEqual(azure.headline,vmware.headline);
   assert.equal(azure.roles[0].employer,vmware.roles[0].employer);
   assert.equal(azure.roles[0].officialTitle.en,vmware.roles[0].officialTitle.en);
+});
+
+test('data-centre roles retain the role-defining requirement in sanitized tailoring', () => {
+  const dataCentreJob = { company:'Example Infrastructure Employer', title:'Systems Engineer - Data Center', location:'Example Region' };
+  const dataCentrePosting = { text:'Operate Windows Server infrastructure with Active Directory, DNS and GPO in highly available data center environments using VMware, backup and recovery, troubleshooting, hardening, automation, TCP/IP, VLANs, Microsoft 365 and Azure.' };
+  const resume = buildResume(dataCentreJob,dataCentrePosting,'en');
+  const letter = buildCoverLetter(dataCentreJob,dataCentrePosting,'en');
+  assert.match(resume.body,/Windows Server/);
+  assert.match(resume.body,/VMware/);
+  assert.ok(letter.requirements.includes('datacentre infrastructure'));
+  assert.doesNotMatch(`${resume.body}\n${letter.body}`,/Veeam expert|SQL Server expert|certified CCNA|CCNP certified/i);
 });
 
 test('languages use one compact ordered line before the driving licence', () => {

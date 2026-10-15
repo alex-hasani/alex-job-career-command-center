@@ -469,14 +469,14 @@ function rankEvidence(jd) {
 function salientRequirements(jd, language) {
   const categories = [
     ['Windows Server / Active Directory','Windows Server / Active Directory', /windows server|active directory|group policy|gpo/i],
+    ['Rechenzentrums-Infrastruktur','datacentre infrastructure', /datacenter|data center|rechenzentrum|server hardware/i],
     ['Linux-Administration','Linux administration', /\blinux\b|red hat|rhel|ubuntu|oracle linux/i],
     ['Microsoft Azure / Hybrid Cloud','Microsoft Azure / hybrid cloud', /\bazure\b|hybrid cloud|cloud infrastructure/i],
     ['Microsoft 365 / Entra ID','Microsoft 365 / Entra ID', /microsoft 365|m365|office 365|entra id|azure ad|exchange online|intune/i],
     ['VMware / Virtualisierung','VMware / virtualisation', /vmware|vsphere|virtuali[sz]/i],
     ['Automatisierung und Scripting','automation and scripting', /ansible|powershell|\bbash\b|automation|scripting/i],
     ['IT-Betrieb und Incident Management','IT operations and incident management', /incident|operations|betrieb|troubleshooting|service continuity|itil/i],
-    ['Infrastruktur-Sicherheit','infrastructure security', /security|sicherheit|vulnerability|hardening|patch management/i],
-    ['Rechenzentrums-Infrastruktur','datacentre infrastructure', /datacenter|data center|rechenzentrum|server hardware/i]
+    ['Infrastruktur-Sicherheit','infrastructure security', /security|sicherheit|vulnerability|hardening|patch management/i]
   ];
   const found = categories.filter(([, ,pattern]) => pattern.test(jd)).map(([de,en]) => language === 'de' ? de : en).slice(0, 4);
   if (found.length) return found;
