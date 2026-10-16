@@ -42,6 +42,10 @@ export async function normalizePdfMetadata(outputPath, title='Application docume
   await writeFile(outputPath, await pdf.save({ useObjectStreams:false }));
 }
 
+export function applicationDocumentsRoot(workspace) {
+  return join(workspace, 'Documents', 'Application_Packs');
+}
+
 const evidenceCatalogue = [
   {
     id:'ev.current.infrastructure',
@@ -877,7 +881,7 @@ async function writeTailoringNotes(folder, data) {
 }
 
 export function createCoverLetterService({ workspace, approvedEvidencePath }) {
-  const applicationsRoot = join(workspace, 'Applications');
+  const applicationsRoot = applicationDocumentsRoot(workspace);
   const approvedPath = approvedEvidencePath || join(workspace, 'Evidence_Bank', 'approved_evidence.json');
   const pdfBuilds = new Map();
 

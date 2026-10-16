@@ -1,12 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { applicationDocumentMetadata, buildApplicationRemarks, buildCoverLetter, buildResume, compactDocumentFileName } from './cover-letter-generator.mjs';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { applicationDocumentMetadata, applicationDocumentsRoot, buildApplicationRemarks, buildCoverLetter, buildResume, compactDocumentFileName } from './cover-letter-generator.mjs';
+import { migrateApplicationDocuments } from './migrate-application-documents.mjs';
 
 const job = { company:'Test Employer', title:'Senior Hybrid Infrastructure Engineer', location:'Stuttgart' };
 const posting = {
   text:'Responsibilities include Windows Server, Active Directory, VMware vSphere, Azure hybrid infrastructure, Linux operations, Ansible automation, incident management, backup and recovery. Requirements include enterprise infrastructure experience, English communication, Terraform and Kubernetes as desirable skills.'
 };
+
+test('generated application files use the central Documents archive', () => {
+  assert.equal(
+    applicationDocumentsRoot('C:/Career'),
+    'C:\\Career\\Documents\\Application_Packs'
+  );
+});
+
+test('legacy application packages migrate without deleting their originals', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'career-documents-'));
+  try {
+    const packageFolder = join(workspace, 'Applications', 'example_role');
+    const versionFolder = join(packageFolder, 'v1');
+    await mkdir(versionFolder, { recursive:true });
+    const documents = {
+      cv:{ de:{document:{fileName:'CV_DE.docx',path:join(versionFolder,'CV_DE.docx')}}, en:{document:{fileName:'CV_EN.docx',path:join(versionFolder,'CV_EN.docx')}} },
+      coverLetter:{ de:{document:{fileName:'CL_DE.docx',path:join(versionFolder,'CL_DE.docx')}}, en:{document:{fileName:'CL_EN.docx',path:join(versionFolder,'CL_EN.docx')}} },
+    };
+    for (const item of [...Object.values(documents.cv), ...Object.values(documents.coverLetter)]) {
+      await writeFile(item.document.path, 'fixture', 'utf8');
+    }
+    await writeFile(join(packageFolder, 'application-package.json'), JSON.stringify({version:3,versions:[{versionNumber:1,documents}]}), 'utf8');
+
+    const result = await migrateApplicationDocuments(workspace);
+    const migratedPath = join(result.archiveRoot, 'example_role', 'application-package.json');
+    const migrated = JSON.parse(await readFile(migratedPath, 'utf8'));
+    assert.equal(result.legacyPreserved, true);
+    assert.equal(result.packagesUpdated, 1);
+    assert.match(migrated.versions[0].documents.cv.de.document.path, /Documents[\\/]Application_Packs[\\/]example_role[\\/]v1[\\/]CV_DE\.docx$/);
+    assert.equal(await readFile(join(packageFolder, 'v1', 'CV_DE.docx'), 'utf8'), 'fixture');
+    assert.equal(await readFile(join(result.archiveRoot, 'example_role', 'v1', 'CV_DE.docx'), 'utf8'), 'fixture');
+  } finally {
+    await rm(workspace, { recursive:true, force:true });
+  }
+});
 
 test('application document names stay informative and below portal limits', () => {
   const longJob = { title:'IT System-Administrator (m/w/d) Fieldservice Im Großraum Stuttgart' };
