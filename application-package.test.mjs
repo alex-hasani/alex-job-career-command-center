@@ -90,6 +90,12 @@ test('job-specific CV uses one evidence map in German and English', () => {
   assert.deepEqual(de.roles.map(role => role.employer),en.roles.map(role => role.employer));
 });
 
+test('excluded Linux and Unix platform names do not appear in generated documents', () => {
+  const de = buildResume(job,posting,'de');
+  const en = buildResume(job,posting,'en');
+  assert.doesNotMatch(`${de.body}\n${en.body}`,/\bSUSE\b|openSUSE|Arch Linux|Solaris/i);
+});
+
 test('unverified growth technologies are reported internally and not added to the CV', () => {
   const resume = buildResume(job,posting,'en');
   assert.equal(/Terraform|Kubernetes/.test(resume.body),false);

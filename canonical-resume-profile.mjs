@@ -56,7 +56,7 @@ export const canonicalResumeProfile = {
   },
   skills: [
     { id:'microsoft', label:{de:'Microsoft-Infrastruktur',en:'Microsoft Infrastructure'}, items:['Windows Server','Active Directory (AD DS)','GPO','DNS','DHCP','Microsoft 365','Entra ID','AD Connect'], evidence:['ev.current.infrastructure','ev.cloud.hybrid','ev.support.m365'] },
-    { id:'linux', label:{de:'Linux / Unix',en:'Linux / Unix'}, items:['RHEL','Ubuntu','SUSE','Package, service, permission, storage and lifecycle administration'], evidence:['ev.current.infrastructure','ev.global.operations'] },
+    { id:'linux', label:{de:'Linux',en:'Linux'}, items:['RHEL','Ubuntu','Package, service, permission, storage and lifecycle administration'], evidence:['ev.current.infrastructure','ev.global.operations'] },
     { id:'virtualization', label:{de:'Virtualisierung & Rechenzentrum',en:'Virtualisation & Datacentre'}, items:['VMware vSphere','vCenter','ESXi','Clusters','vMotion','Templates','Snapshots','Host maintenance','VM provisioning','Datacentre migrations'], evidence:['ev.global.operations','ev.current.infrastructure'] },
     { id:'azure', label:{de:'Azure & Hybrid Cloud',en:'Azure & Hybrid Cloud'}, items:['Azure IaaS','Azure VMs','VNets','VNet Peering','VPN Gateway','Azure Bastion','NSGs','Azure Backup','Hybrid Identity','Entra ID / Azure AD','AD Connect'], evidence:['ev.cloud.hybrid','ev.support.m365'] },
     { id:'automation', label:{de:'Automatisierung',en:'Automation'}, items:['Ansible','Bash','PowerShell (praktische Kenntnisse / practical knowledge)','Python (praktische Kenntnisse / practical knowledge)','SSH','Git / GitHub'], evidence:['ev.current.infrastructure','ev.global.operations'] },
