@@ -90,6 +90,18 @@ test('job-specific CV uses one evidence map in German and English', () => {
   assert.deepEqual(de.roles.map(role => role.employer),en.roles.map(role => role.employer));
 });
 
+test('CV and cover letter share the same four-line header for every role emphasis', () => {
+  for (const language of ['de','en']) {
+    for (const text of ['Azure Entra hybrid cloud', 'Windows Server Active Directory Microsoft 365', 'VMware vSphere datacenter']) {
+      const source={text};
+      const resume=buildResume(job,source,language);
+      const letter=buildCoverLetter(job,source,language);
+      assert.deepEqual(resume.body.split('\n').slice(0,4),letter.headerLines);
+      assert.equal(resume.headline,letter.headline);
+    }
+  }
+});
+
 test('excluded Linux and Unix platform names do not appear in generated documents', () => {
   const de = buildResume(job,posting,'de');
   const en = buildResume(job,posting,'en');

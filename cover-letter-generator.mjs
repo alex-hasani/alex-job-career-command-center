@@ -517,10 +517,18 @@ function formatEnglishDate(date=new Date()) {
   return new Intl.DateTimeFormat('en-GB', { day:'numeric', month:'long', year:'numeric', timeZone:'Europe/Berlin' }).format(date);
 }
 
+function documentHeaderLines(language, headline) {
+  const identity=canonicalResumeProfile.identity;
+  const location=language === 'de' ? identity.location.replace(/\bGermany$/, 'Deutschland') : identity.location;
+  return [identity.name,headline,`${location} | ${identity.phone} | ${identity.email}`,`LinkedIn: ${identity.linkedin} | GitHub: ${identity.github}`];
+}
+
 export function buildCoverLetter(job, posting, languagePreference) {
   const preference = String(languagePreference || '').toLowerCase();
   if (!['de','en'].includes(preference)) throw new Error('Choose German or English before generating the cover letter');
   const language = preference;
+  const headline=clusterDefinitions[determineCluster(posting.text)].headline[language];
+  const headerLines=documentHeaderLines(language,headline);
   const evidence = rankEvidence(posting.text);
   const requirements = salientRequirements(posting.text, language);
   const company = job.company || (language === 'de' ? 'Ihrem Unternehmen' : 'your organisation');
@@ -543,7 +551,7 @@ export function buildCoverLetter(job, posting, languagePreference) {
   const date = language === 'de' ? formatGermanDate() : formatEnglishDate();
   const signer = canonicalResumeProfile.identity.name;
   const body = [greeting, ...paragraphs, closing, signer].join('\n\n');
-  return { language, languagePreference:preference, subject, date, greeting, paragraphs, closing, signer, body, evidenceIds:[...new Set(evidence.map(item => item.id))], requirements };
+  return { language, languagePreference:preference, headline, headerLines, subject, date, greeting, paragraphs, closing, signer, body, evidenceIds:[...new Set(evidence.map(item => item.id))], requirements };
 }
 
 export function buildApplicationRemarks(job, posting, languagePreference) {
@@ -648,9 +656,7 @@ export function buildResume(job, posting, language='de') {
   const labels = resumeSectionLabels(language);
   const familiarities = matchingFamiliarities(profile, tokens);
   const lines = [
-    profile.identity.name,
-    definition.headline[language],
-    `${profile.identity.location} | ${profile.identity.phone} | ${profile.identity.email} | LinkedIn: ${profile.identity.linkedin} | GitHub: ${profile.identity.github}`,
+    ...documentHeaderLines(language,definition.headline[language]),
     profile.identity.workAuthorisation[language],
     '',
     summaryFor(cluster, language),
@@ -725,14 +731,9 @@ async function applicationDocxBuffer(document) {
 async function createDocx(packageData, outputPath) {
   const letter = packageData.letter;
   const bodyParts = paragraphsFromBody(letter.body);
+  const headerLines=letter.headerLines || documentHeaderLines(letter.language,letter.headline || canonicalResumeProfile.baseHeadline[letter.language]);
   const children = [
-    new Paragraph({ spacing:{ after:80 }, children:[new TextRun({ text:canonicalResumeProfile.identity.name, bold:true, size:34, font:'Arial' })] }),
-    new Paragraph({ spacing:{ after:40 }, children:[new TextRun({ text:letter.language === 'de' ? 'Senior Infrastructure Engineer | Azure- und Hybrid-Cloud-Infrastruktur' : 'Senior Infrastructure Engineer | Azure and Hybrid Cloud Infrastructure', bold:true, color:'245684', size:22, font:'Arial' })] }),
-    new Paragraph({ spacing:{ after:20 }, children:[new TextRun({ text:`${canonicalResumeProfile.identity.location} | ${canonicalResumeProfile.identity.phone} | ${canonicalResumeProfile.identity.email}`, size:19, font:'Arial' })] }),
-    new Paragraph({ spacing:{ after:180 }, children:[
-      new ExternalHyperlink({ link:`https://${canonicalResumeProfile.identity.linkedin}`, children:[new TextRun({ text:`LinkedIn: ${canonicalResumeProfile.identity.linkedin}`, style:'Hyperlink', size:19, font:'Arial' })] }),
-      new TextRun({ text:` | GitHub: ${canonicalResumeProfile.identity.github}`, size:19, font:'Arial' })
-    ] }),
+    ...docxHeaderParagraphs(headerLines),
     new Paragraph({ spacing:{ after:100 }, children:[new TextRun({ text:letter.date, color:'555555', size:20, font:'Arial' })] }),
     new Paragraph({ spacing:{ after:180 }, children:[new TextRun({ text:letter.subject, bold:true, size:23, font:'Arial' })] })
   ];
@@ -745,18 +746,29 @@ async function createDocx(packageData, outputPath) {
   const doc = new Document({
     creator:metadata.author, lastModifiedBy:metadata.author, title:metadata.title, subject:metadata.subject, description:'', keywords:metadata.keywords.join(', '),
     styles:{ default:{ document:{ run:{ font:'Arial', size:20 }, paragraph:{ spacing:{ line:276 } } } } },
-    sections:[{ properties:{ page:{ margin:{ top:900, right:1040, bottom:900, left:1040 } } }, children }]
+    sections:[{ properties:{ page:{ margin:{ top:700, right:850, bottom:700, left:850 } } }, children }]
   });
   await writeFile(outputPath, await applicationDocxBuffer(doc));
 }
+
+function docxHeaderParagraph(text,index) {
+  const links=index === 3 && text.includes(' | GitHub: ')
+    ? [
+        new ExternalHyperlink({ link:`https://www.${canonicalResumeProfile.identity.linkedin}/`, children:[new TextRun({ text:text.split(' | GitHub: ')[0], color:'17253A', size:18, font:'Arial' })] }),
+        new TextRun({ text:' | ', color:'17253A', size:18, font:'Arial' }),
+        new ExternalHyperlink({ link:`https://${canonicalResumeProfile.identity.github}`, children:[new TextRun({ text:`GitHub: ${text.split(' | GitHub: ')[1]}`, color:'17253A', size:18, font:'Arial' })] })
+      ]
+    : null;
+  return new Paragraph({ spacing:{ after:index === 1 ? 80 : index === 3 ? 180 : 50 }, children:links || [new TextRun({ text, bold:index < 2, color:index === 1 ? '245684' : '17253A', size:index === 0 ? 34 : index === 1 ? 22 : 18, font:'Arial' })] });
+}
+function docxHeaderParagraphs(lines) { return lines.map(docxHeaderParagraph); }
 
 function resumeParagraphs(body) {
   const sectionNames = new Set(Object.values(resumeSectionLabels('de')).concat(Object.values(resumeSectionLabels('en'))));
   return String(body || '').replace(/\r\n?/g,'\n').split('\n').map((raw,index) => {
     const text = raw.trim();
     if (!text) return new Paragraph({ spacing:{ after:70 } });
-    if (index === 0) return new Paragraph({ spacing:{ after:50 }, children:[new TextRun({ text, bold:true, size:34, font:'Arial' })] });
-    if (index === 1) return new Paragraph({ spacing:{ after:80 }, children:[new TextRun({ text, bold:true, color:'245684', size:22, font:'Arial' })] });
+    if (index < 4) return docxHeaderParagraph(text,index);
     if (sectionNames.has(text)) return new Paragraph({ heading:HeadingLevel.HEADING_2, spacing:{ before:180, after:70 }, border:{ bottom:{ color:'8FAADC', size:5, space:3 } }, children:[new TextRun({ text, bold:true, color:'245684', size:21, font:'Arial' })] });
     if (text.startsWith('• ')) return new Paragraph({ bullet:{ level:0 }, spacing:{ after:40, line:240 }, children:[new TextRun({ text:text.slice(2), size:18, font:'Arial' })] });
     if (/\|.*\|.*\|/.test(text)) return new Paragraph({ spacing:{ before:90, after:45 }, children:[new TextRun({ text, bold:true, size:19, font:'Arial' })] });
@@ -780,6 +792,10 @@ async function createResumeDocx(resume, outputPath) {
 
 function htmlEscape(value='') {
   return String(value).replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
+}
+const documentHeaderCss='header h1{font-size:17pt;margin:0 0 1mm}header h2{font-size:11pt;line-height:1.25;color:#245684;margin:0 0 2mm;border:0}header p{font-size:9pt;margin:0 0 .8mm}';
+function documentHeaderHtml(lines) {
+  return `<header><h1>${htmlEscape(lines[0])}</h1><h2>${htmlEscape(lines[1])}</h2><p>${htmlEscape(lines[2])}</p><p>${htmlEscape(lines[3])}</p></header>`;
 }
 
 async function withPdfTimeout(operation, milliseconds=30000) {
@@ -805,6 +821,7 @@ async function createPdf(packageData, outputPath) {
   if (!browserCandidates.length) throw new Error('PDF export requires Microsoft Edge or Google Chrome on this computer');
   const letter = packageData.letter;
   const paragraphs = paragraphsFromBody(letter.body);
+  const headerLines=letter.headerLines || documentHeaderLines(letter.language,letter.headline || canonicalResumeProfile.baseHeadline[letter.language]);
   let browser = null;
   for (const executablePath of browserCandidates) {
     try {
@@ -819,8 +836,8 @@ async function createPdf(packageData, outputPath) {
   try {
     const page = await browser.newPage();
     await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
-      @page{size:A4;margin:16mm 20mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:10pt/1.4 Arial,sans-serif}h1{margin:0;font-size:16.5pt}h2{margin:1.8mm 0 1.2mm;color:#245684;font-size:10.5pt;line-height:1.25}header p{margin:0 0 .8mm;font-size:9pt}.date{margin:6mm 0 3.5mm;color:#555}.subject{margin:0 0 5mm;font-weight:700;font-size:11pt}.letter p{margin:0 0 3.8mm;white-space:pre-wrap}.letter p:last-child{font-weight:700}</style></head><body>
-      <header><h1>${htmlEscape(canonicalResumeProfile.identity.name)}</h1><h2>${htmlEscape(canonicalResumeProfile.baseHeadline[letter.language])}</h2><p>${htmlEscape(`${canonicalResumeProfile.identity.location} | ${canonicalResumeProfile.identity.phone} | ${canonicalResumeProfile.identity.email}`)}</p><p>${htmlEscape(`LinkedIn: ${canonicalResumeProfile.identity.linkedin} | GitHub: ${canonicalResumeProfile.identity.github}`)}</p></header>
+      @page{size:A4;margin:14mm 16mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:10pt/1.4 Arial,sans-serif}${documentHeaderCss}.date{margin:6mm 0 3.5mm;color:#555}.subject{margin:0 0 5mm;font-weight:700;font-size:11pt}.letter p{margin:0 0 3.8mm;white-space:pre-wrap}.letter p:last-child{font-weight:700}</style></head><body>
+      ${documentHeaderHtml(headerLines)}
       <p class="date">${htmlEscape(letter.date)}</p><p class="subject">${htmlEscape(letter.subject)}</p><div class="letter">${paragraphs.map(text => `<p>${htmlEscape(text)}</p>`).join('')}</div>
       </body></html>`, { waitUntil:'load' });
     await withPdfTimeout(page.pdf({ path:outputPath, format:'A4', printBackground:true, preferCSSPageSize:true }));
@@ -840,18 +857,16 @@ async function createResumePdf(resume, outputPath) {
   try {
     const sectionNames = new Set(Object.values(resumeSectionLabels('de')).concat(Object.values(resumeSectionLabels('en'))));
     const lines = resume.body.replace(/\r\n?/g,'\n').split('\n');
-    const html = lines.map((raw,index) => {
+    const html = lines.slice(4).map(raw => {
       const value = raw.trim();
       if (!value) return '<div class="space"></div>';
-      if (index === 0) return `<h1>${htmlEscape(value)}</h1>`;
-      if (index === 1) return `<p class="headline">${htmlEscape(value)}</p>`;
       if (sectionNames.has(value)) return `<h2>${htmlEscape(value)}</h2>`;
       if (value.startsWith('• ')) return `<p class="bullet">${htmlEscape(value.slice(2))}</p>`;
       if (/\|.*\|.*\|/.test(value)) return `<h3>${htmlEscape(value)}</h3>`;
       return `<p>${htmlEscape(value)}</p>`;
     }).join('');
     const page = await browser.newPage();
-    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:14mm 16mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:9pt/1.32 Arial,sans-serif}h1{font-size:17pt;margin:0 0 1mm}p{margin:0 0 1.5mm}.headline{font-size:11pt;font-weight:700;color:#245684;margin-bottom:2mm}h2{font-size:10.5pt;color:#245684;border-bottom:.5pt solid #8faadc;margin:4mm 0 1.5mm}h3{font-size:9.2pt;margin:2.5mm 0 1mm}.bullet{padding-left:4mm;position:relative}.bullet:before{content:'•';position:absolute;left:1mm}.space{height:1.5mm}</style></head><body>${html}</body></html>`,{waitUntil:'load'});
+    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:14mm 16mm}*{box-sizing:border-box}body{margin:0;color:#17253a;font:9pt/1.32 Arial,sans-serif}p{margin:0 0 1.5mm}${documentHeaderCss}h2{font-size:10.5pt;color:#245684;border-bottom:.5pt solid #8faadc;margin:4mm 0 1.5mm}h3{font-size:9.2pt;margin:2.5mm 0 1mm}.bullet{padding-left:4mm;position:relative}.bullet:before{content:'•';position:absolute;left:1mm}.space{height:1.5mm}</style></head><body>${documentHeaderHtml(lines.slice(0,4))}${html}</body></html>`,{waitUntil:'load'});
     await withPdfTimeout(page.pdf({ path:outputPath, format:'A4', printBackground:true, preferCSSPageSize:true }));
     await normalizePdfMetadata(outputPath,resume.headline || 'Curriculum Vitae');
   } finally { await browser.close(); }
