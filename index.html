@@ -1520,9 +1520,9 @@
             <section class="package-downloads" id="packageDownloads" hidden>
               <h3>Downloads · <span id="packageDownloadLanguage">German</span></h3>
               <div class="package-download-grid">
-                <a id="downloadCvDocx" href="#">Download CV · Word</a>
+                <button id="downloadCvDocx" type="button">Download CV · Word</button>
                 <button id="downloadCvPdf" type="button">Save CV · PDF</button>
-                <a id="downloadLetterDocx" href="#">Download cover letter · Word</a>
+                <button id="downloadLetterDocx" type="button">Download cover letter · Word</button>
                 <button id="downloadLetterPdf" type="button">Save cover letter · PDF</button>
               </div>
             </section>
@@ -2578,6 +2578,44 @@
           control.textContent = originalLabel;
         }
       }
+      async function savePackageWord(control) {
+        const url = control.dataset.wordUrl;
+        const fileName = control.dataset.fileName;
+        if (!url || !fileName) return studioMessage("This Word document is not ready yet.",true);
+        const originalLabel = control.textContent;
+        control.disabled = true;
+        control.textContent = "Preparing Word document…";
+        try {
+          const response = await fetch(url, { cache:"no-store" });
+          if (!response.ok) throw new Error("The Word document could not be downloaded.");
+          const blob = await response.blob();
+          if (!blob.size || !/application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document/i.test(response.headers.get("content-type") || "")) throw new Error("The Word document is invalid.");
+          const file = new File([blob],fileName,{ type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",lastModified:Date.now() });
+          const shareData = { files:[file], title:file.name };
+          if (useMobilePdfShare() && typeof navigator.share === "function" && typeof navigator.canShare === "function" && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            studioMessage("The Word document was handed to your device. Choose Save to Files or another native action.");
+          } else {
+            const objectUrl = URL.createObjectURL(file);
+            const download = document.createElement("a");
+            download.href = objectUrl;
+            download.download = file.name;
+            download.target = "_blank";
+            download.rel = "noopener";
+            download.hidden = true;
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl),60000);
+            studioMessage("The Word document was sent to your browser's downloads.");
+          }
+        } catch (error) {
+          if (error.name !== "AbortError") studioMessage(error.message || "The Word document could not be saved.",true);
+        } finally {
+          control.disabled = false;
+          control.textContent = originalLabel;
+        }
+      }
       function renderPackageDifference() {
         const summary = currentApplicationPackage?.customizationSummary?.[currentLetterLanguage];
         const container = $("packageDiffBody");
@@ -2612,9 +2650,11 @@
         const cv = currentApplicationPackage.documents.cv[language];
         const letter = currentApplicationPackage.documents.coverLetter[language];
         $("packageDownloadLanguage").textContent = languageLabel;
-        $("downloadCvDocx").href = cv.document.downloadUrl;
+        $("downloadCvDocx").dataset.wordUrl = cv.document.downloadUrl;
+        $("downloadCvDocx").dataset.fileName = cv.document.fileName;
         const cvPdfReady = warmPdfControl($("downloadCvPdf"),cv.document.pdfDownloadUrl,pdfFileName(cv),"Save CV · PDF");
-        $("downloadLetterDocx").href = letter.document.downloadUrl;
+        $("downloadLetterDocx").dataset.wordUrl = letter.document.downloadUrl;
+        $("downloadLetterDocx").dataset.fileName = letter.document.fileName;
         warmPdfControl($("downloadLetterPdf"),letter.document.pdfDownloadUrl,pdfFileName(letter),"Save cover letter · PDF",cvPdfReady);
         $("packageDownloads").hidden = currentPackageDocumentType === "remarks";
         $("printPackageDocument").hidden = currentPackageDocumentType === "remarks";
@@ -3031,6 +3071,8 @@
       $("copyCoverLetter").onclick = copyPackageDocument;
       $("downloadCvPdf").onclick = event => savePackagePdf(event.currentTarget);
       $("downloadLetterPdf").onclick = event => savePackagePdf(event.currentTarget);
+      $("downloadCvDocx").onclick = event => savePackageWord(event.currentTarget);
+      $("downloadLetterDocx").onclick = event => savePackageWord(event.currentTarget);
       $("printPackageDocument").onclick = printPackageDocument;
       $("confirmSubmitted").onclick = confirmApplicationSubmitted;
       $("connectGmail").onclick = connectFastApplyGmail;
