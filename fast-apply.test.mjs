@@ -32,6 +32,9 @@ test('German challenge and qualification sections count as a complete advert', (
 test('website agent recognises common ATS fields and keeps continuation separate from submission', () => {
   assert.equal(fieldKindForHint('Vorname / First name'),'firstName');
   assert.equal(fieldKindForHint('Gehaltsvorstellung'),'salary');
+  const salaryValues={salary:'75000',salaryNumber:'75000'};
+  assert.equal(websiteApplyInternals().scalarValueForField('salary','number','Gehaltswunsch',salaryValues),'75000');
+  assert.equal(websiteApplyInternals().scalarValueForField('salary','text','Gehaltswunsch brutto pro Jahr',salaryValues),'75000');
   assert.equal(fieldKindForHint('Straße'),'street');
   assert.equal(fieldKindForHint('PLZ'),'postalCode');
   assert.equal(fieldKindForHint('Deine Anmerkungen'),'notes');
