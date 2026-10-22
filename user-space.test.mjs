@@ -90,6 +90,9 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /Turn your real experience into interview-ready applications\./);
   assert.match(html, /using only your verified skills, experience, and achievements\./);
   assert.match(html, /href="\/dashboard"/);
+  assert.match(html, /href="\/teaching"/);
+  assert.match(html, /IT Jobs/);
+  assert.match(html, /Teaching Jobs/);
   assert.match(html, /Global administration/);
   assert.match(html, /Account and security/);
   assert.match(html, /name="birthDate"/);
@@ -193,6 +196,11 @@ test('root is the account landing page and the dashboard redirects signed-out vi
     assert.equal(await router.handle(request, dashboard, new URL('http://127.0.0.1/dashboard')), true);
     assert.equal(dashboard.status, 302);
     assert.equal(dashboard.headers.location, '/');
+
+    const teaching = response();
+    assert.equal(await router.handle(request, teaching, new URL('http://127.0.0.1/teaching')), true);
+    assert.equal(teaching.status, 302);
+    assert.equal(teaching.headers.location, '/');
   } finally { router.close(); await rm(directory, { recursive:true, force:true }); }
 });
 

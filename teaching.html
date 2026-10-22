@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Teaching Jobs</title>
+  <link rel="stylesheet" href="/teaching.css">
+</head>
+<body>
+  <main class="shell">
+    <nav class="topbar" aria-label="Career direction">
+      <a href="/profile">Profile</a>
+      <a href="/dashboard">IT Jobs</a>
+      <span aria-current="page">Teaching Jobs</span>
+    </nav>
+    <header class="hero">
+      <p class="eyebrow">SEPARATE CAREER DIRECTION</p>
+      <h1>Teaching Jobs</h1>
+      <p>Teaching documents and sources have their own workspace. The IT Jobs database and dashboard remain separate.</p>
+    </header>
+    <p id="loadStatus" class="status" role="status">Loading Teaching workspace…</p>
+    <section class="grid" aria-label="Teaching workspace">
+      <div class="card">
+        <h2>Teaching documents</h2>
+        <p>General CVs and cover letters. Downloads stay on this page.</p>
+        <div id="documents" class="items"></div>
+      </div>
+      <div class="card">
+        <h2>Teaching sources</h2>
+        <p id="region"></p>
+        <div id="sources" class="items"></div>
+      </div>
+    </section>
+    <section class="card next-stage">
+      <h2>Live Teaching search</h2>
+      <p>The separate search, application tracker, tailored document flow and Teaching Chrome helper are being connected in stages. No Teaching result will enter the IT Jobs database.</p>
+    </section>
+  </main>
+  <script type="module" src="/teaching.js"></script>
+</body>
+</html>

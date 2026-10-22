@@ -5,6 +5,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { teachingDocument, teachingOverview } from './teaching-space.mjs';
 
 const scrypt = promisify(scryptCallback);
 const PASSWORD_N = 2 ** 15;
@@ -421,6 +422,10 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     ['/profile/', ['user-space.html', 'text/html; charset=utf-8']],
     ['/dashboard', ['index.html', 'text/html; charset=utf-8']],
     ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+    ['/teaching', ['teaching.html', 'text/html; charset=utf-8']],
+    ['/teaching/', ['teaching.html', 'text/html; charset=utf-8']],
+    ['/teaching.js', ['teaching.js', 'text/javascript; charset=utf-8']],
+    ['/teaching.css', ['teaching.css', 'text/css; charset=utf-8']],
     ['/user-space.js', ['user-space.js', 'text/javascript; charset=utf-8']],
     ['/user-space.css', ['user-space.css', 'text/css; charset=utf-8']],
   ]);
@@ -687,7 +692,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
   async function handle(req, res, url) {
     const staticEntry = staticFiles.get(url.pathname);
     if (staticEntry && req.method === 'GET') {
-      if ((url.pathname === '/dashboard' || url.pathname === '/index.html') && !rawSession(req)) {
+      if ((url.pathname === '/dashboard' || url.pathname === '/index.html' || url.pathname === '/teaching' || url.pathname === '/teaching/') && !rawSession(req)) {
         res.writeHead(302, securityHeaders({ location:'/' }));
         res.end();
         return true;
@@ -716,6 +721,15 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         else sendJson(res, 200, { authenticated:true, user:publicUser(session.user), csrfToken:session.row.csrf_token, expiresAt:session.row.expires_at, resume:publicDocument(latestResume(session.row.user_id)), documents:documentsFor(session.row.user_id), skills:skillsFor(session.row.user_id), libraryError:session.row.user_id===protectedAdminId()?assets.error:'', applicationProfile:profileFor(session.row.user_id) });
       } else if (url.pathname === '/api/user-space/mobile-downloads' && req.method === 'GET') {
         await listMobileDownloads(req,res);
+      } else if (url.pathname === '/api/user-space/teaching-overview' && req.method === 'GET') {
+        requireSession(req);
+        sendJson(res,200,{ok:true,...await teachingOverview(workspace)});
+      } else if (url.pathname.startsWith('/api/user-space/teaching-documents/') && req.method === 'GET') {
+        requireSession(req);
+        const item=await teachingDocument(workspace,decodeURIComponent(url.pathname.slice('/api/user-space/teaching-documents/'.length)));
+        if(!item) throw httpError(404,'Teaching document not found.','NOT_FOUND');
+        res.writeHead(200,securityHeaders({'content-type':item.contentType,'content-disposition':`attachment; filename="${item.name}"`,'content-length':String(item.file.length),'cache-control':'no-store'}));
+        res.end(item.file);
       } else if (url.pathname.startsWith('/api/user-space/mobile-downloads/') && req.method === 'GET') {
         await downloadMobileFile(req,res,decodeURIComponent(url.pathname.slice('/api/user-space/mobile-downloads/'.length)));
       } else if (url.pathname.startsWith('/api/user-space/documents/') && req.method === 'GET') {

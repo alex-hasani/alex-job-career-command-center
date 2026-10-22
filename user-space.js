@@ -231,7 +231,6 @@ async function verifySession({initial=false}={}) {
   return false;
 }
 void verifySession({initial:true});
-if(location.pathname.startsWith('/profile')) window.addEventListener('load',()=>openDialog('accountDialog'),{once:true});
 setInterval(()=>void verifySession(),5000);
 window.addEventListener('focus',()=>void verifySession());
 window.addEventListener('pageshow',()=>void verifySession());
