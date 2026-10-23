@@ -5,8 +5,12 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { teachingDocument } from './teaching-space.mjs';
+import { teachingDocument, teachingOverview } from './teaching-space.mjs';
 import { createTeachingDashboard } from './teaching-dashboard.mjs';
+import { createTeachingApplicationService } from './teaching-application-service.mjs';
+import { createTeachingFastApplyManager } from './teaching-fast-apply-manager.mjs';
+import { createWebsiteApplyAgent as createTeachingWebsiteApplyAgent } from './teaching-tools/website-apply-agent.mjs';
+import { createChromeHelperClient as createTeachingChromeHelperClient } from './teaching-tools/chrome-helper-client.mjs';
 
 const scrypt = promisify(scryptCallback);
 const PASSWORD_N = 2 ** 15;
@@ -362,6 +366,10 @@ export async function readMobileDownloadRegistry(workspace, registryPath=join(wo
 export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json') }) {
   const db = openUserSpaceDatabase(databasePath);
   const teachingDashboard = createTeachingDashboard({ workspace });
+  const teachingApplications = createTeachingApplicationService({ workspace });
+  const teachingFastApply = createTeachingFastApplyManager({workspace,applications:teachingApplications,getJob:id=>teachingDashboard.getJob(id),onDelivered:(id,delivery)=>teachingDashboard.markSent(id,delivery)});
+  teachingFastApply.ready.catch(()=>{});
+  const teachingBrowserAgents=new Map();
   if(protectedAdminProfile) {
     const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
     if(protectedAdminId) {
@@ -588,6 +596,34 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return row ? JSON.parse(row.profile_json) : {};
   }
 
+  function teachingExtensionFor(userId) {
+    return db.prepare("SELECT public_id FROM browser_extensions WHERE user_id=? AND public_id LIKE 'teaching_%' ORDER BY created_at DESC LIMIT 1").get(userId)?.public_id||'';
+  }
+  function teachingAgent(publicId,userId) {
+    if(!publicId?.startsWith('teaching_')) throw httpError(403,'Use the Teaching browser helper for Teaching applications.','TEACHING_HELPER_REQUIRED');
+    let agent=teachingBrowserAgents.get(publicId);
+    if(!agent) {
+      const personal=profileFor(userId);
+      const profile=applicationProfile({...personal,email:personal.email||'candidate@example.com',desiredSalaryAnnualEur:''});
+      agent=createTeachingWebsiteApplyAgent({workspace,coverLetters:teachingApplications,profile,chromeClient:createTeachingChromeHelperClient(`teaching:extension:${publicId}`)});
+      teachingBrowserAgents.set(publicId,agent);
+    }
+    return agent;
+  }
+  async function teachingRetryCurrentBrowserPage(input,account) {
+    if(!account?.publicId?.startsWith('teaching_')) throw httpError(403,'The Teaching browser helper is required.','TEACHING_HELPER_REQUIRED');
+    const tabId=Number(input.tabId),url=String(input.url||'');
+    if(!Number.isInteger(tabId)||tabId<0) throw httpError(400,'The Chrome tab could not be identified.','INVALID_TAB');
+    const agent=teachingAgent(account.publicId,account.userId);
+    const prior=await agent.retryPage(tabId);
+    if(prior) return prior;
+    const job=await teachingDashboard.resolvePage(url);
+    if(['Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed','Silent'].includes(job.applicationStatus)) throw httpError(409,'This Teaching application is already recorded or closed.','APPLICATION_RECORDED');
+    let pkg=await teachingApplications.read(job);
+    if(!pkg?.quality?.applicationReady) pkg=await teachingApplications.prepare(job,job.description);
+    return agent.startOnPage(job,tabId,pkg,input.language||'en');
+  }
+
   async function saveProfile(req,res) {
     const session=requireSession(req,{csrf:true});
     const profile=cleanProfile(await readJson(req));
@@ -634,6 +670,27 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     for(const name of names) entries.push({name,data:await readFile(join(extensionRoot,name))});
     const archive=buildStoredZip(entries),filename=`alex-job-helper-${session.user.username}-${publicId.slice(0,6)}.zip`;
     recordSecurity(session.row.user_id,'browser_extension_exported');
+    res.writeHead(200,securityHeaders({'content-type':'application/zip','content-disposition':`attachment; filename="${filename}"`,'content-length':String(archive.length)}));res.end(archive);
+  }
+
+  async function exportTeachingExtension(req,res) {
+    const session=requireSession(req,{csrf:true});
+    const profile=profileFor(session.row.user_id),overview=await teachingOverview(workspace);
+    if(!profile.firstName||!profile.lastName) throw httpError(409,'Save your application profile before exporting the Teaching helper.','PROFILE_REQUIRED');
+    if(!overview.documents.some(item=>/Teaching_CV_EN_.*\.pdf$/i.test(item.name))) throw httpError(409,'A Teaching master CV PDF is required.','TEACHING_CV_REQUIRED');
+    const id=randomUUID(),publicId=`teaching_${randomBytes(12).toString('hex')}`,token=randomBytes(32).toString('base64url');
+    const {publicKey}=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'der'}});
+    const manifestKey=publicKey.toString('base64');
+    db.prepare('INSERT INTO browser_extensions(id,user_id,public_id,token_hash,manifest_key,created_at) VALUES(?,?,?,?,?,?)').run(id,session.row.user_id,publicId,sha256(token),manifestKey,nowIso());
+    const extensionRoot=join(root,'teaching-chrome-helper-extension');
+    const names=['service-worker.js','offscreen.html','offscreen.js','popup.html','popup.js','popup.css'];
+    const manifest=JSON.parse(await readFile(join(extensionRoot,'manifest.json'),'utf8'));
+    manifest.name=`Alex Job Teaching Helper — ${session.user.display_name}`.slice(0,70);manifest.short_name=`Teaching ${session.user.username}`.slice(0,30);manifest.key=manifestKey;
+    const config=`export const helperConfig=${JSON.stringify({publicId,token,displayName:session.user.display_name,username:session.user.username})};\n`;
+    const entries=[{name:'manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'profile-config.js',data:config}];
+    for(const name of names)entries.push({name,data:await readFile(join(extensionRoot,name))});
+    const archive=buildStoredZip(entries),filename=`alex-job-teaching-helper-${session.user.username}-${publicId.slice(-6)}.zip`;
+    recordSecurity(session.row.user_id,'teaching_browser_extension_exported');
     res.writeHead(200,securityHeaders({'content-type':'application/zip','content-disposition':`attachment; filename="${filename}"`,'content-length':String(archive.length)}));res.end(archive);
   }
 
@@ -739,6 +796,64 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         requireSession(req,{csrf:true});
         const input=await readJson(req);
         sendJson(res,200,{ok:true,job:teachingDashboard.updateStatus(String(input.id||''),String(input.status||''),String(input.comment||''))});
+      } else if (url.pathname === '/api/user-space/teaching-application-package' && req.method === 'GET') {
+        requireSession(req);
+        const job=teachingDashboard.getJob(url.searchParams.get('id')||'');
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        sendJson(res,200,{ok:true,package:await teachingApplications.read(job)});
+      } else if (url.pathname === '/api/user-space/teaching-application-package' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req),job=teachingDashboard.getJob(String(input.id||''));
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        sendJson(res,200,{ok:true,package:await teachingApplications.prepare(job,String(input.description||''))});
+      } else if (url.pathname === '/api/user-space/teaching-application-package/download' && req.method === 'GET') {
+        requireSession(req);
+        const job=teachingDashboard.getJob(url.searchParams.get('id')||'');
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        const item=await teachingApplications.download(job,url.searchParams.get('language')||'en',url.searchParams.get('format')||'docx',url.searchParams.get('type')||'cv',url.searchParams.get('version'));
+        const bytes=await readFile(item.path);
+        res.writeHead(200,securityHeaders({'content-type':item.contentType,'content-disposition':`attachment; filename="${item.fileName}"`,'content-length':String(bytes.length),'cache-control':'no-store'}));
+        res.end(bytes);
+      } else if (url.pathname === '/api/user-space/teaching-fast-apply/status' && req.method === 'GET') {
+        requireSession(req);
+        sendJson(res,200,{ok:true,...await teachingFastApply.status()});
+      } else if (url.pathname === '/api/user-space/teaching-fast-apply/preview' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req),job=teachingDashboard.getJob(String(input.id||''));
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        sendJson(res,200,{ok:true,...await teachingFastApply.preview(job,String(input.language||''),String(input.recipient||''))});
+      } else if (url.pathname === '/api/user-space/teaching-fast-apply/send' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req),job=teachingDashboard.getJob(String(input.id||''));
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        sendJson(res,200,{ok:true,pending:await teachingFastApply.queue(job,input)});
+      } else if (url.pathname === '/api/user-space/teaching-fast-apply/undo' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,pending:await teachingFastApply.undo(String(input.id||''))});
+      } else if (url.pathname === '/api/user-space/teaching-fast-apply/pending' && req.method === 'GET') {
+        requireSession(req);
+        sendJson(res,200,{ok:true,pending:await teachingFastApply.pending(url.searchParams.get('id')||'')});
+      } else if (url.pathname === '/api/user-space/teaching-website-apply/start' && req.method === 'POST') {
+        const session=requireSession(req,{csrf:true}),input=await readJson(req);
+        const job=teachingDashboard.getJob(String(input.id||''));
+        if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
+        if(['Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed','Silent'].includes(job.applicationStatus)) throw httpError(409,'This Teaching application is already recorded or closed.','APPLICATION_RECORDED');
+        const publicId=teachingExtensionFor(session.row.user_id);
+        if(!publicId) throw httpError(409,'Export and install the Teaching Chrome helper first.','TEACHING_HELPER_REQUIRED');
+        const pkg=await teachingApplications.read(job);
+        if(!pkg?.quality?.applicationReady) throw httpError(409,'Prepare the Teaching CV and cover letter first.','PACKAGE_REQUIRED');
+        sendJson(res,202,{ok:true,session:await teachingAgent(publicId,session.row.user_id).start(job,pkg,String(input.language||'en'))});
+      } else if (url.pathname === '/api/user-space/teaching-website-apply/status' && req.method === 'GET') {
+        const session=requireSession(req),publicId=teachingExtensionFor(session.row.user_id);
+        sendJson(res,200,{ok:true,session:publicId?teachingAgent(publicId,session.row.user_id).status(url.searchParams.get('id')||''):null,helperReady:Boolean(publicId)});
+      } else if (url.pathname === '/api/user-space/teaching-website-apply/submit' && req.method === 'POST') {
+        const session=requireSession(req,{csrf:true}),input=await readJson(req);
+        if(input.confirmed!==true) throw httpError(400,'Final website submission confirmation is required.','CONFIRMATION_REQUIRED');
+        const job=teachingDashboard.getJob(String(input.id||'')),publicId=teachingExtensionFor(session.row.user_id);
+        if(!job||!publicId) throw httpError(404,'Teaching application or browser helper not found.','NOT_FOUND');
+        const result=await teachingAgent(publicId,session.row.user_id).confirmSubmit(job.id);
+        sendJson(res,200,{ok:true,session:result,job:teachingDashboard.markSent(job.id,{sentAt:new Date().toISOString()},'teaching-website-apply')});
       } else if (url.pathname === '/api/user-space/teaching-saved-searches' && req.method === 'POST') {
         requireSession(req,{csrf:true});
         const input=await readJson(req);
@@ -766,6 +881,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
       else if (url.pathname === '/api/user-space/refine' && req.method === 'POST') await refine(req, res);
       else if (url.pathname === '/api/user-space/application-profile' && req.method === 'PUT') await saveProfile(req,res);
       else if (url.pathname === '/api/user-space/chrome-extension' && req.method === 'POST') await exportExtension(req,res);
+      else if (url.pathname === '/api/user-space/teaching-chrome-extension' && req.method === 'POST') await exportTeachingExtension(req,res);
       else if (url.pathname === '/api/user-space/admin/users' && req.method === 'GET') await adminUsers(req,res);
       else if (url.pathname === '/api/user-space/admin/users' && req.method === 'PATCH') await manageUser(req,res);
       else throw httpError(404, 'User-space endpoint not found.', 'NOT_FOUND');
@@ -775,5 +891,5 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return true;
   }
 
-  return { handle, extensionContext, db, ready:protectedAssetsReady, close:() => { teachingDashboard.close(); db.close(); } };
+  return { handle, extensionContext, teachingWebsiteAgent:account=>teachingAgent(account.publicId,account.userId), teachingRetryCurrentBrowserPage, db, ready:protectedAssetsReady, close:() => { teachingFastApply.close(); for(const agent of teachingBrowserAgents.values())void agent.close(); teachingDashboard.close(); db.close(); } };
 }

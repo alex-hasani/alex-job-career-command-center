@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTeachingDashboard, verifiedTeachingPosting } from './teaching-dashboard.mjs';
 import { filterTeachingJobs, teachingFilterIds } from './teaching-filter-logic.js';
+import { websiteApplyInternals as teachingApplyInternals } from './teaching-tools/website-apply-agent.mjs';
 
 const page='https://school.example/jobs/english-teacher';
 const posting={
@@ -84,6 +85,25 @@ test('Teaching dashboard keeps the IT dashboard structure without IT API calls',
   assert.match(script,/\/api\/user-space\/teaching-overview/);
   assert.match(script,/\/api\/user-space\/teaching-refresh/);
   assert.doesNotMatch(script,/fetch\([`'"]\/api\/(?:jobs|refresh|application-status|saved-searches)/);
+});
+
+test('Teaching browser helper is isolated and writes only Teaching postings',async()=>{
+  const workspace=await mkdtemp(join(tmpdir(),'public-teaching-browser-'));
+  await mkdir(join(workspace,'State'),{recursive:true});
+  await writeFile(join(workspace,'State','job_search.sqlite'),'IT-DB-SENTINEL');
+  const dashboard=createTeachingDashboard({workspace,fetchImpl:async()=>({ok:true,headers:{get:()=> 'text/html'},text:async()=>html(posting)})});
+  try{
+    assert.equal((await dashboard.resolvePage(page)).title,'English Teacher');
+    assert.equal(await readFile(join(workspace,'State','job_search.sqlite'),'utf8'),'IT-DB-SENTINEL');
+    await assert.rejects(dashboard.resolvePage('https://school.example/jobs/search'),/exact public Teaching job posting/);
+  }finally{dashboard.close();await rm(workspace,{recursive:true,force:true});}
+  const worker=await readFile(new URL('./teaching-chrome-helper-extension/service-worker.js',import.meta.url),'utf8');
+  const server=await readFile(new URL('./server.mjs',import.meta.url),'utf8');
+  assert.match(worker,/x-alex-job-track':'teaching'/);
+  assert.match(server,/teaching:extension:/);
+  const note=teachingApplyInternals().applicationNote({title:'English Teacher',company:'Example School',description:'Teach children and young learners'},'en','Demo Candidate','Available immediately.');
+  assert.match(note,/lesson plans, materials and after-class follow-up/);
+  assert.doesNotMatch(note,/Azure|Microsoft|Linux|IT infrastructure/);
 });
 
 test('Teaching criteria use the IT Boolean, strict-city, remote, salary and status rules',()=>{

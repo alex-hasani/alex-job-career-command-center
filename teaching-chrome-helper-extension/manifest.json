@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Alex Job Teaching Browser Helper",
+  "version": "1.2.2",
+  "description": "Runs approved Teaching application steps in this signed-in Chrome profile, in a separate channel from IT Jobs.",
+  "permissions": ["tabs", "scripting", "debugger", "offscreen", "storage"],
+  "host_permissions": ["<all_urls>", "http://127.0.0.1:8787/*", "http://localhost:8787/*"],
+  "background": {"service_worker": "service-worker.js", "type": "module"},
+  "action": {"default_title": "Teaching Website Apply", "default_popup": "popup.html"}
+}

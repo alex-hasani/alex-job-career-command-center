@@ -160,6 +160,20 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
 
   function getRefresh(id) {return refreshState?.id===id?publicRefreshState():null;}
 
+  async function resolvePage(url) {
+    const page=publicUrl(url,true);
+    if(!page) throw new Error('Open an exact public Teaching job posting first');
+    const existing=db.listJobs({includeInactive:true}).find(job=>{
+      try{return new URL(job.url).href.replace(/\/$/,'')===page.href.replace(/\/$/,'');}catch{return false;}
+    });
+    if(existing) return existing;
+    const html=await fetchHtml(page.href,fetchImpl,8000);
+    const verified=html&&verifiedTeachingPosting(html,page.href,page.hostname);
+    if(!verified) throw new Error('This page is not an independently verified, open Teaching posting');
+    db.importAgentJobs([{...verified,origin:'agent'}]);
+    return db.getJob(verified.id);
+  }
+
   function updateStatus(id,status,comment='') {
     if (!statuses.has(status)) throw new Error('Unsupported Teaching application status');
     const current=db.getJob(id);
@@ -167,6 +181,14 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
     if (typeof comment!=='string' || comment.length>2000) throw new Error('Comment is too long');
     const statusChanged=status!==current.applicationStatus;
     return db.updateApplication(id,{applicationStatus:status,applicationComment:comment,...(statusChanged?{applicationStatusChangedAt:new Date().toISOString()}:{}),changeSource:'user'});
+  }
+
+  function markSent(id,delivery,source='teaching-fast-apply') {
+    const current=db.getJob(id);
+    if(!current) throw new Error('Teaching job was not found');
+    if(['Interviewing','Offer','Rejected','Withdrawn','Case Closed'].includes(current.applicationStatus)) return current;
+    if(['Applied','Silent'].includes(current.applicationStatus) && current.applicationStatusChangedAt && Date.parse(current.applicationStatusChangedAt)>=Date.parse(delivery.sentAt)) return current;
+    return db.updateApplication(id,{applicationStatus:'Applied',applicationStatusChangedAt:delivery.sentAt,applicationComment:current.applicationComment||'',changeSource:source});
   }
 
   function saveSearch(name,criteria={}) {
@@ -186,5 +208,5 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
     if(deleted && db.getMetadata('active_saved_search')?.value===id) db.setMetadata('active_saved_search','');
     return deleted;
   }
-  return {overview,refresh,startRefresh,getRefresh,updateStatus,saveSearch,setActiveSearch,deleteSearch,close:()=>db.db.close(),databasePath:paths.database};
+  return {overview,refresh,startRefresh,getRefresh,getJob:id=>db.getJob(id),resolvePage,updateStatus,markSent,saveSearch,setActiveSearch,deleteSearch,close:()=>db.db.close(),databasePath:paths.database};
 }

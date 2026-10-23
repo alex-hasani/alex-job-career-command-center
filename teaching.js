@@ -76,9 +76,91 @@ function jobCard(job,compact=false){
     if(job.description){const details=element('details');const summary=element('summary','', 'Job description');details.append(summary,element('p','',job.description.slice(0,2500)));card.append(details);}
   }
   const actions=element('div','job-actions');
-  const link=element('a','',compact?'Posting':'Apply ↗');link.href=job.url;link.target='_blank';link.rel='noopener noreferrer';actions.append(link,statusSelect(job));card.append(actions);
+  const link=element('a','',compact?'Posting':'Apply ↗');link.href=job.url;link.target='_blank';link.rel='noopener noreferrer';actions.append(link,statusSelect(job));
+  const studio=element('button','','Prepare documents');studio.type='button';studio.addEventListener('click',()=>openApplication(job));actions.append(studio);card.append(actions);
   if(!compact){const comment=element('textarea');comment.value=job.applicationComment||'';comment.placeholder='Application notes';comment.setAttribute('aria-label',`Application notes for ${job.title}`);const save=element('button','', 'Save note');save.type='button';save.addEventListener('click',()=>saveStatus(job,job.applicationStatus||'Not recorded',comment.value));card.append(comment,save);}
   return card;
+}
+
+let applicationJob=null;
+async function openApplication(job){
+  applicationJob=job;
+  $('applicationTitle').textContent=`Teaching application · ${job.title}`;
+  $('applicationDescription').value=job.description||'';
+  $('applicationPackage').replaceChildren();
+  $('teachingFastApply').hidden=true;
+  $('teachingWebsiteApply').hidden=true;
+  $('teachingSendState').textContent='';
+  $('teachingWebsiteState').textContent='';
+  $('sendTeachingEmail').disabled=true;
+  $('submitTeachingWebsiteApply').disabled=true;
+  $('applicationDialog').showModal();
+  try{
+    const result=await request(`/api/user-space/teaching-application-package?id=${encodeURIComponent(job.id)}`);
+    if(applicationJob?.id===job.id && result.package)renderApplicationPackage(result.package);
+  }catch(error){setMessage(error.message,true);}
+}
+function renderApplicationPackage(pkg){
+  const area=$('applicationPackage');area.replaceChildren(element('p','',`Version ${pkg.currentVersion} · Teaching-only documents`));
+  for(const language of ['en','de'])for(const type of ['cv','coverLetter']){
+    const item=pkg.documents[type][language],row=element('div','document');
+    row.append(element('strong','',`${language.toUpperCase()} ${type==='cv'?'CV':'cover letter'}`));
+    for(const [label,url,format] of [['Word',item.document.downloadUrl,'docx'],['PDF',item.document.pdfDownloadUrl,'pdf']]){
+      const button=element('button','',label);button.type='button';button.addEventListener('click',()=>downloadDocument({url,name:item.document.fileName.replace(/\.docx$/i,`.${format}`)},button));row.append(button);
+    }
+    area.append(row);
+  }
+  area.append(element('p','hint','Review both documents and the recipient before any application. Preparing documents does not send or submit anything.'));
+  $('teachingFastApply').hidden=false;
+  $('teachingWebsiteApply').hidden=false;
+  previewTeachingEmail();
+}
+async function previewTeachingEmail(){
+  if(!applicationJob)return;
+  const jobId=applicationJob.id,language=$('teachingEmailLanguage').value;
+  try{
+    const result=await request('/api/user-space/teaching-fast-apply/preview',{method:'POST',body:JSON.stringify({id:jobId,language})});
+    if(applicationJob?.id!==jobId||$('teachingEmailLanguage').value!==language)return;
+    const p=result.preview;
+    $('teachingRecipient').value=p.recipient||'';
+    $('teachingSubject').value=p.subject||'';
+    $('teachingMessage').value=p.body||'';
+    $('teachingGmailStatus').textContent=p.gmail.connected?`Connected as ${p.gmail.email}. ${result.remaining} of 10 Teaching sends available today.`:'Gmail is not connected. Reconnect the shared Gmail account in IT Jobs, then return here.';
+    $('sendTeachingEmail').disabled=!p.gmail.connected;
+    if(result.pending)showTeachingPending(result.pending);
+  }catch(error){if(applicationJob?.id!==jobId)return;$('teachingGmailStatus').textContent=error.message;$('sendTeachingEmail').disabled=true;}
+}
+function showTeachingPending(pending){
+  const undo=$('undoTeachingEmail'),send=$('sendTeachingEmail');
+  undo.hidden=pending.status!=='queued';
+  send.disabled=['queued','sending','sent','uncertain'].includes(pending.status);
+  $('teachingSendState').textContent=pending.status==='queued'?`Queued. Undo before ${new Date(pending.dueAt).toLocaleTimeString()}.`:pending.status==='sent'?`Sent to ${pending.to} at ${new Date(pending.sentAt).toLocaleString()}. Teaching status is Applied.`:pending.error||`Teaching send: ${pending.status}`;
+}
+async function pollTeachingPending(jobId){
+  for(let count=0;count<22;count++){
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    const result=await request(`/api/user-space/teaching-fast-apply/pending?id=${encodeURIComponent(jobId)}`);
+    if(applicationJob?.id===jobId&&result.pending)showTeachingPending(result.pending);
+    if(!result.pending||!['queued','sending'].includes(result.pending.status)){
+      if(result.pending?.status==='sent'){
+        const overview=await request('/api/user-space/teaching-overview');
+        data.jobs=overview.jobs;renderStatuses();render();
+      }
+      return;
+    }
+  }
+}
+function showTeachingWebsiteSession(session){
+  $('teachingWebsiteState').textContent=session?.message||session?.status||'No Teaching website application is running.';
+  $('submitTeachingWebsiteApply').disabled=session?.status!=='ready_for_final_confirmation';
+}
+async function pollTeachingWebsite(jobId){
+  for(let count=0;count<150;count++){
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const result=await request(`/api/user-space/teaching-website-apply/status?id=${encodeURIComponent(jobId)}`);
+    if(applicationJob?.id===jobId)showTeachingWebsiteSession(result.session);
+    if(!result.session||['ready_for_final_confirmation','submitted','failed','cancelled'].includes(result.session.status))return;
+  }
 }
 
 function renderJobs(visible){
@@ -184,6 +266,54 @@ function bind(){
   $('goEnd').addEventListener('click',()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'}));
   $('queue').addEventListener('click',()=>{renderQueue();$('queueDialog').showModal();});
   $('closeQueue').addEventListener('click',()=>$('queueDialog').close());
+  $('closeApplication').addEventListener('click',()=>$('applicationDialog').close());
+  $('teachingEmailLanguage').addEventListener('change',()=>previewTeachingEmail());
+  $('sendTeachingEmail').addEventListener('click',async()=>{
+    if(!applicationJob)return;
+    if(!confirm(`Send this Teaching application to ${$('teachingRecipient').value.trim()} after a 15-second Undo window?`))return;
+    try{
+      const result=await request('/api/user-space/teaching-fast-apply/send',{method:'POST',body:JSON.stringify({id:applicationJob.id,to:$('teachingRecipient').value.trim(),subject:$('teachingSubject').value,body:$('teachingMessage').value,language:$('teachingEmailLanguage').value,confirmed:true})});
+      showTeachingPending(result.pending);pollTeachingPending(applicationJob.id).catch(error=>setMessage(error.message,true));
+    }catch(error){$('teachingSendState').textContent=error.message;setMessage(error.message,true);}
+  });
+  $('undoTeachingEmail').addEventListener('click',async()=>{if(!applicationJob)return;try{const result=await request('/api/user-space/teaching-fast-apply/undo',{method:'POST',body:JSON.stringify({id:applicationJob.id})});showTeachingPending(result.pending);}catch(error){setMessage(error.message,true);}});
+  $('downloadTeachingHelper').addEventListener('click',async()=>{
+    const button=$('downloadTeachingHelper');button.disabled=true;
+    try{
+      const response=await fetch('/api/user-space/teaching-chrome-extension',{method:'POST',headers:{'x-csrf-token':csrfToken},credentials:'same-origin'});
+      if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||'Teaching helper export failed');}
+      const blob=await response.blob(),name=response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'alex-job-teaching-helper.zip';
+      const url=URL.createObjectURL(blob),anchor=element('a');anchor.href=url;anchor.download=name;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      $('teachingWebsiteState').textContent='Teaching helper downloaded. Extract it and load the folder unpacked in the same Chrome profile.';
+    }catch(error){$('teachingWebsiteState').textContent=error.message;setMessage(error.message,true);}finally{button.disabled=false;}
+  });
+  $('startTeachingWebsiteApply').addEventListener('click',async()=>{
+    if(!applicationJob)return;
+    const button=$('startTeachingWebsiteApply');button.disabled=true;
+    try{
+      const result=await request('/api/user-space/teaching-website-apply/start',{method:'POST',body:JSON.stringify({id:applicationJob.id,language:$('teachingEmailLanguage').value})});
+      showTeachingWebsiteSession(result.session);pollTeachingWebsite(applicationJob.id).catch(error=>setMessage(error.message,true));
+    }catch(error){$('teachingWebsiteState').textContent=error.message;setMessage(error.message,true);}finally{button.disabled=false;}
+  });
+  $('submitTeachingWebsiteApply').addEventListener('click',async()=>{
+    if(!applicationJob)return;
+    if(!confirm(`Submit the Teaching application for ${applicationJob.title} at ${applicationJob.company} from the currently open Chrome page?`))return;
+    const button=$('submitTeachingWebsiteApply');button.disabled=true;
+    try{
+      const result=await request('/api/user-space/teaching-website-apply/submit',{method:'POST',body:JSON.stringify({id:applicationJob.id,confirmed:true})});
+      showTeachingWebsiteSession(result.session);data.jobs=data.jobs.map(job=>job.id===result.job.id?result.job:job);renderStatuses();render();
+    }catch(error){$('teachingWebsiteState').textContent=error.message;setMessage(error.message,true);}finally{button.disabled=false;}
+  });
+  $('prepareApplication').addEventListener('click',async()=>{
+    if(!applicationJob)return;
+    const button=$('prepareApplication');button.disabled=true;
+    try{
+      const result=await request('/api/user-space/teaching-application-package',{method:'POST',body:JSON.stringify({id:applicationJob.id,description:$('applicationDescription').value})});
+      renderApplicationPackage(result.package);
+      setMessage('Teaching documents prepared in the separate Teaching folder. Review before using them.');
+    }catch(error){$('applicationPackage').replaceChildren(element('p','',error.message));setMessage(error.message,true);}
+    finally{button.disabled=false;}
+  });
   $('mobileFilters').addEventListener('click',()=>$('filters').scrollIntoView({behavior:'smooth'}));$('mobileResults').addEventListener('click',()=>$('results').scrollIntoView({behavior:'smooth'}));$('mobileBoard').addEventListener('click',()=>{view='board';render();$('jobs').scrollIntoView({behavior:'smooth'});});$('mobileRefresh').addEventListener('click',()=>refresh());
   renderWeightControls();
 }

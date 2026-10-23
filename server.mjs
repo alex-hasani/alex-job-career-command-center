@@ -55,6 +55,11 @@ const websiteApply = createWebsiteApplyAgent({ workspace, coverLetters, profile:
 const personalisedWebsiteAgents=new Map();
 function browserHelperContext(req) {
   const account=userSpace.extensionContext(req);
+  if(account?.publicId?.startsWith('teaching_') && req.headers['x-alex-job-track']!=='teaching') throw new Error('The Teaching browser helper cannot use the IT application channel');
+  if(req.headers['x-alex-job-track']==='teaching') {
+    if(!account?.publicId?.startsWith('teaching_')) throw new Error('The Teaching browser helper needs its own authorised installation');
+    return {channel:`teaching:extension:${account.publicId}`,account,agent:userSpace.teachingWebsiteAgent(account),track:'teaching'};
+  }
   const channel=account?`extension:${account.publicId}`:'default';
   if(!account) return {channel,account:null,agent:websiteApply};
   let agent=personalisedWebsiteAgents.get(account.publicId);
@@ -1464,7 +1469,8 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ok:true,accepted}));
       }
       if(url.pathname==='/api/browser-helper/retry-current'&&req.method==='POST') {
-        const session=await retryCurrentBrowserPage(await jsonBody(req),helper);
+        const input=await jsonBody(req);
+        const session=helper.track==='teaching' ? await userSpace.teachingRetryCurrentBrowserPage(input,helper.account) : await retryCurrentBrowserPage(input,helper);
         res.writeHead(202,{'content-type':'application/json','cache-control':'no-store'});
         return res.end(JSON.stringify({ok:true,session}));
       }
