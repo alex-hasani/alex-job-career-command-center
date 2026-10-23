@@ -1,9 +1,12 @@
-import { matchesBooleanText, compareSourcesByAvailabilityAndName } from './filter-logic.js';
+import { compareSourcesByAvailabilityAndName } from './filter-logic.js';
+import { filterTeachingJobs, teachingFilterIds, teachingCheckboxIds, teachingStatuses } from './teaching-filter-logic.js';
 
 const $=id=>document.getElementById(id);
 const statusNames=['Not recorded','Stashed','Preparing','Applied','Interviewing','Offer','Rejected','Silent','Case Closed','Withdrawn'];
-const filterIds=['query','location','company','sourceSelect','applicationStatus','workType','model','freshness','search','sort'];
-let csrfToken='', data={jobs:[],sources:[],documents:[],savedSearches:[],sourceStatus:[],databaseStats:{total:0}},view=localStorage.getItem('alex-teaching-view')||'list';
+const filterIds=teachingFilterIds;
+const teachingWeights={english:['english','esl','efl','englisch'],youngLearners:['children','young learners','jugendliche','kinder'],training:['teacher training','teacher observation','trainer','fortbildung'],online:['online','remote','digital','virtual'],operations:['lesson plan','class management','follow-up','curriculum']};
+let weights=JSON.parse(localStorage.getItem('alex-teaching-weights')||'{"english":5,"youngLearners":5,"training":4,"online":3,"operations":3}');
+let csrfToken='', data={jobs:[],sources:[],documents:[],savedSearches:[],sourceStatus:[],databaseStats:{total:0}},view=localStorage.getItem('alex-teaching-view')||'list',refreshing=false;
 
 function setMessage(value,error=false){$('loadStatus').textContent=value;$('loadStatus').classList.toggle('error',error);}
 function element(tag,className='',text=''){const node=document.createElement(tag);if(className)node.className=className;if(text)node.textContent=text;return node;}
@@ -21,36 +24,29 @@ async function request(path,options={}) {
 
 function renderMetrics(visible) {
   const all=data.jobs||[];
-  $('count').textContent=String(all.filter(job=>job.active!==false).length);
-  $('strongCount').textContent=String(all.filter(job=>job.active!==false&&Number(job.match||0)>=70).length);
+  $('count').textContent=String(visible.length);
+  $('strongCount').textContent=String(visible.filter(job=>['PRIORITY APPLY','APPLY'].includes(job.recommendation)).length);
   $('online').textContent=String((data.sourceStatus||[]).filter(source=>source.status==='ok').length);
   $('appliedCount').textContent=String(all.filter(job=>['Applied','Interviewing','Offer'].includes(job.applicationStatus)).length);
   $('dbCount').textContent=String(data.databaseStats?.total||0);
-  $('resultCount').textContent=`${visible.length} shown`;
-  $('filterStatus').textContent=`${visible.length} matching Teaching roles in a separate database`;
+  $('resultCount').textContent=`${visible.length} result${visible.length===1?'':'s'}`;
+  const active=filterIds.filter(id=>teachingCheckboxIds.has(id)?$(id).checked:$(id).value!==''&&$(id).value!=='0'&&id!=='sort').length;
+  $('filterStatus').textContent=active?`${active} active filter${active===1?'':'s'} · results update instantly`:'No filters applied';
+  const conversion=data.databaseStats?.conversion||{};
+  $('outcomeSummary').textContent=conversion.applications?`${conversion.applications} tracked applications · ${conversion.interviews||0} interviews or offers · application-to-interview ${conversion.applicationToInterview??'not enough data'}% · interview-to-offer ${conversion.interviewToOffer??'not enough data'}%.`:'No completed Teaching application funnel yet.';
 }
 
+function weightedMatch(job){
+  const evidence=`${job.title||''} ${job.description||''}`.toLowerCase();
+  let possible=0,matched=0;
+  for(const [family,terms] of Object.entries(teachingWeights)){const value=Number(weights[family])||0;possible+=value;if(terms.some(term=>evidence.includes(term)))matched+=value;}
+  const base=Number(job.interviewFitScore??job.match)||0;
+  return possible?Math.min(99,Math.round(base*.9+matched/possible*10)):base;
+}
+function criteria(){return Object.fromEntries(filterIds.map(id=>[id,teachingCheckboxIds.has(id)?$(id).checked:$(id).value]));}
 function filteredJobs(){
-  const query=$('query').value.trim(),search=$('search').value.trim(),location=$('location').value.trim().toLowerCase();
-  const company=$('company').value.trim().toLowerCase(),source=$('sourceSelect').value,status=$('applicationStatus').value;
-  const workType=$('workType').value,model=$('model').value,freshness=Number($('freshness').value||0);
-  const result=(data.jobs||[]).filter(job=>{
-    const text=`${job.title||''} ${job.company||''} ${job.location||''} ${job.description||''}`.toLowerCase();
-    if(query&&!matchesBooleanText(job,query))return false;
-    if(search&&!text.includes(search.toLowerCase()))return false;
-    if(location&&!String(job.location||'').toLowerCase().includes(location)&&!job.remote)return false;
-    if(company&&!String(job.company||'').toLowerCase().includes(company))return false;
-    if(source&&job.source!==source)return false;
-    if(status&&job.applicationStatus!==status)return false;
-    if(workType&&job.workType!==workType)return false;
-    if(model==='remote'&&!job.remote)return false;
-    if(model==='onsite'&&job.remote)return false;
-    if(freshness&&(!job.postedAt||Date.now()-Date.parse(job.postedAt)>freshness*86400000))return false;
-    return true;
-  });
-  const sort=$('sort').value;
-  result.sort((a,b)=>sort==='company'?String(a.company).localeCompare(String(b.company)):sort==='source'?String(a.source).localeCompare(String(b.source)):sort==='newest'?(Date.parse(b.postedAt||b.verifiedAt||0)-Date.parse(a.postedAt||a.verifiedAt||0)):(Number(b.match||0)-Number(a.match||0)));
-  return result;
+  const cities=[...$('location').options].map(item=>item.value).filter(Boolean);
+  return filterTeachingJobs((data.jobs||[]).map(job=>({...job,interviewFitScore:weightedMatch(job)})),criteria(),cities);
 }
 
 async function saveStatus(job,status,comment){
@@ -75,7 +71,7 @@ function jobCard(job,compact=false){
   card.append(element('p','',`${job.company} · ${job.location}`));
   if(!compact){
     const meta=element('div','job-meta');
-    for(const label of [`${job.match||0}% interview fit`,job.workType||'Not stated',job.remote?'Remote / hybrid':'On-site / not stated',job.source])meta.append(element('span','chip',label));
+    for(const label of [`${job.interviewFitScore||job.match||0}% provisional interview fit`,job.workType||'Not stated',job.remote?'Remote / hybrid':'On-site / not stated',job.source])meta.append(element('span','chip',label));
     card.append(meta);
     if(job.description){const details=element('details');const summary=element('summary','', 'Job description');details.append(summary,element('p','',job.description.slice(0,2500)));card.append(details);}
   }
@@ -101,12 +97,12 @@ function renderJobs(visible){
 
 function renderSources(){
   const statusByName=new Map((data.sourceStatus||[]).map(item=>[item.source,item]));
-  const sources=(data.sources||[]).map(source=>({...source,status:statusByName.get(source.name)?.status||source.availability||'not_checked'})).sort(compareSourcesByAvailabilityAndName);
+  const sources=(data.sources||[]).map(source=>{const status=statusByName.get(source.name)?.status||source.availability||'not_checked';return {...source,status,availability:status==='ok'?'available':status==='unavailable'?'unavailable':source.availability||'not_checked'};}).sort(compareSourcesByAvailabilityAndName);
   const badges=$('sources');badges.replaceChildren();
   for(const source of sources)badges.append(element('span',`source ${source.status}`,`${source.name} · ${source.status==='ok'?'Verified':source.status==='unavailable'?'Unavailable':'Not verified'}`));
   $('networkSummary').textContent=`${sources.length} Teaching sources · ${sources.filter(source=>source.status==='ok').length} with verified postings`;
   const sites=$('sites');sites.replaceChildren();
-  for(const source of sources){const row=element('div','site'),body=element('div');body.append(element('strong','',source.name),element('small','',source.type==='shared-source'?'General source':'Teaching source'));const link=element('a','','Open source');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';row.append(body,link);sites.append(row);}
+  for(const source of sources){const row=element('div','site'),body=element('div');body.append(element('strong','',source.name),element('small','',source.type==='shared-source'?'General source':'Teaching source'));const link=element('a','','Open in split view ↗');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';link.dataset.sourceName=source.name;row.append(body,link);sites.append(row);}
   const sourceSelect=$('sourceSelect'),selected=sourceSelect.value;sourceSelect.replaceChildren(option('','All sources'));
   for(const source of sources)sourceSelect.append(option(source.name,source.name));sourceSelect.value=selected;
 }
@@ -120,23 +116,76 @@ async function downloadDocument(info,button){
 function renderDocuments(){const documents=$('documents');documents.replaceChildren();for(const info of data.documents||[]){const row=element('div','document'),body=element('div');body.append(element('strong','',info.name),element('small','',`${info.format} · ${Math.ceil(info.bytes/1024)} KB`));const button=element('button','','Download');button.type='button';button.addEventListener('click',()=>downloadDocument(info,button));row.append(body,button);documents.append(row);}if(!documents.childElementCount)documents.append(element('p','muted','No Teaching documents are available yet.'));}
 
 function render(){const visible=filteredJobs();renderMetrics(visible);renderJobs(visible);renderSources();renderDocuments();}
-async function load(){data=await request('/api/user-space/teaching-overview');$('location').value=data.targetRegion?.match(/Stuttgart/i)?'Stuttgart':data.targetRegion||'Stuttgart';const searches=$('savedSearch');searches.replaceChildren(option('','Saved searches'));for(const saved of data.savedSearches||[])searches.append(option(saved.id,saved.name));setMessage(`${data.databaseStats?.total||0} Teaching records · ${data.sources?.length||0} sources`);render();}
-
-async function refresh(){const button=$('refresh');button.disabled=true;setMessage('Checking exact Teaching posting pages. Your saved results remain available…');try{const result=await request('/api/user-space/teaching-refresh',{method:'POST',body:JSON.stringify({query:$('query').value,location:$('location').value})});data={...data,...result};setMessage(`${result.verified} exact postings verified across ${result.checked} Teaching sources.`);render();}catch(error){setMessage(error.message,true);}finally{button.disabled=false;}}
-
-function criteria(){return Object.fromEntries(filterIds.map(id=>[id,$(id).value]));}
-function restore(values){for(const id of filterIds)if(Object.hasOwn(values,id))$(id).value=String(values[id]??'');render();}
-
+function renderSearches(){const select=$('savedSearch'),current=select.value;select.replaceChildren(option('','Saved searches'));for(const saved of data.savedSearches||[])select.append(option(saved.id,saved.name));select.value=data.activeSavedSearchId||current;}
+function renderLocations(){const select=$('location'),current=select.value,values=[...new Set((data.jobs||[]).map(job=>job.location).filter(Boolean))].sort();for(const location of values)if(![...select.options].some(item=>item.value===location))select.append(option(location,location));select.value=current;}
+function renderStatuses(){const select=$('applicationStatus'),current=select.value;select.replaceChildren(option('active',`Active applications (${(data.jobs||[]).filter(job=>job.active!==false&&!['Rejected','Withdrawn','Case Closed','Silent'].includes(job.applicationStatus)).length})`),option('',`Any application status (${data.jobs?.length||0})`));for(const status of teachingStatuses)select.append(option(status,`${status} (${(data.jobs||[]).filter(job=>job.applicationStatus===status).length})`));select.value=current;}
+async function load(){
+  data=await request('/api/user-space/teaching-overview');
+  renderLocations();renderStatuses();renderSearches();
+  const saved=data.savedSearches?.find(item=>item.id===data.activeSavedSearchId);
+  if(saved)restore(saved.criteria);
+  $('updated').textContent=data.databaseStats?.total?`Loaded ${data.databaseStats.total} saved Teaching records`:'Not refreshed yet';
+  setMessage(`${data.databaseStats?.active||0} active · ${data.databaseStats?.archived||0} archived`);
+  render();
+  if(data.refreshState?.status==='running')await pollRefresh(data.refreshState);
+  else refresh('automatic').catch(error=>setMessage(error.message,true));
+}
+function showProgress(state){
+  $('refreshProgress').classList.add('active');
+  $('refreshBar').style.width=`${state.progress||0}%`;
+  $('refreshPercent').textContent=`${state.progress||0}%`;
+  $('refreshPhase').textContent=state.phase||'Refreshing Teaching database';
+  $('refreshSources').textContent=state.totalSources?`${state.completedSources||0} of ${state.totalSources} Teaching sources checked`:'Preparing sources';
+  const seconds=Math.max(0,Number(state.elapsedSeconds)||0);
+  $('refreshTime').textContent=`Elapsed ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+}
+async function pollRefresh(initial){
+  const button=$('refresh');button.disabled=true;button.textContent='Refreshing database…';refreshing=true;
+  let state=initial;
+  try{
+    const deadline=Date.now()+5*60_000;
+    while(state.status==='running'){
+      showProgress(state);
+      if(Date.now()>deadline)throw new Error('Teaching refresh timed out; saved results remain available.');
+      await new Promise(resolve=>setTimeout(resolve,900));
+      state=await request(`/api/user-space/teaching-refresh?id=${encodeURIComponent(state.id)}`);
+    }
+    showProgress(state);
+    if(state.status==='failed')throw new Error(state.error||'Teaching refresh failed.');
+    data={...data,...state.result};renderLocations();renderStatuses();renderSearches();render();
+    $('updated').textContent=`Database refreshed ${new Date(data.refreshedAt).toLocaleString('en-GB')}`;
+    setMessage(`${state.result.verified} exact postings verified across ${state.result.checked} Teaching sources.`);
+  }catch(error){setMessage(error.message,true);$('refreshPhase').textContent='Refresh failed';}
+  finally{button.disabled=false;button.textContent='Refresh live results';refreshing=false;}
+}
+async function refresh(trigger='manual'){
+  if(refreshing)return;
+  setMessage(trigger==='automatic'?'Opening Teaching Jobs — automatically refreshing live results.':'Starting manual Teaching source refresh.');
+  const state=await request('/api/user-space/teaching-refresh',{method:'POST',body:JSON.stringify({query:$('query').value.trim(),location:$('location').value,includeRemoteAnywhere:$('includeRemoteAnywhere').checked})});
+  await pollRefresh(state);
+}
+function restore(values){for(const id of filterIds)if(Object.hasOwn(values,id)){if(teachingCheckboxIds.has(id))$(id).checked=Boolean(values[id]);else $(id).value=String(values[id]??'');}render();}
+function renderWeightControls(){const grid=$('weightGrid');for(const family of Object.keys(teachingWeights)){const label=element('label','',family.replace(/([A-Z])/g,' $1'));const select=element('select');select.dataset.family=family;for(let n=0;n<=5;n++)select.append(option(String(n),n?'Weight '+n:'Ignore'));select.value=String(weights[family]||0);select.addEventListener('change',()=>{weights[family]=Number(select.value);localStorage.setItem('alex-teaching-weights',JSON.stringify(weights));render();});grid.append(label,select);}}
+function renderQueue(){const container=$('queueJobs');container.replaceChildren();const pending=(data.jobs||[]).filter(job=>['Preparing','Stashed'].includes(job.applicationStatus));if(!pending.length)container.append(element('p','muted','No Teaching applications are preparing.'));for(const job of pending)container.append(jobCard(job,true));}
 function bind(){
-  for(const id of filterIds)$(id).addEventListener(id==='search'||id==='query'||id==='company'||id==='location'?'input':'change',render);
-  $('refresh').addEventListener('click',refresh);
-  $('clear').addEventListener('click',()=>{restore({query:'',location:'',company:'',sourceSelect:'',applicationStatus:'',workType:'',model:'',freshness:'',search:'',sort:'priority'});});
-  $('savedSearch').addEventListener('change',()=>{const saved=data.savedSearches.find(item=>item.id===$('savedSearch').value);if(saved)restore(saved.criteria);});
-  $('saveSearch').addEventListener('click',async()=>{const name=prompt('Name this Teaching search:');if(!name)return;try{const result=await request('/api/user-space/teaching-saved-searches',{method:'POST',body:JSON.stringify({name,criteria:criteria()})});data.savedSearches=[...data.savedSearches.filter(item=>item.id!==result.search.id),result.search];$('savedSearch').append(option(result.search.id,result.search.name));$('savedSearch').value=result.search.id;setMessage('Teaching search saved in its own database.');}catch(error){setMessage(error.message,true);}});
-  $('deleteSearch').addEventListener('click',async()=>{const id=$('savedSearch').value;if(!id)return;try{await request(`/api/user-space/teaching-saved-searches?id=${encodeURIComponent(id)}`,{method:'DELETE'});data.savedSearches=data.savedSearches.filter(item=>item.id!==id);$('savedSearch').querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();$('savedSearch').value='';setMessage('Teaching search removed.');}catch(error){setMessage(error.message,true);}});
+  for(const id of filterIds)$(id).addEventListener(['search','query','company','salary'].includes(id)?'input':'change',()=>{render();if(['query','location'].includes(id))$('subtitle').textContent='Search criteria changed. Refresh to rebuild the live Teaching database.';});
+  $('refresh').addEventListener('click',()=>refresh());
+  $('query').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();refresh();}});
+  $('clear').addEventListener('click',()=>{const empty=Object.fromEntries(filterIds.map(id=>[id,teachingCheckboxIds.has(id)?false:'']));empty.match='0';empty.opportunity='0';empty.sort='priority';restore(empty);});
+  $('savedSearch').addEventListener('change',async()=>{const id=$('savedSearch').value;const saved=data.savedSearches.find(item=>item.id===id);if(saved)restore(saved.criteria);try{await request('/api/user-space/teaching-saved-searches/active',{method:'POST',body:JSON.stringify({id})});data.activeSavedSearchId=id;}catch(error){setMessage(error.message,true);}});
+  $('saveSearch').addEventListener('click',async()=>{const name=prompt('Name this Teaching search:',$('query').value.trim()||'Stuttgart Teaching roles');if(!name)return;try{const result=await request('/api/user-space/teaching-saved-searches',{method:'POST',body:JSON.stringify({name,criteria:criteria()})});data.savedSearches=[...data.savedSearches.filter(item=>item.id!==result.search.id),result.search];data.activeSavedSearchId=result.search.id;renderSearches();setMessage('Teaching search saved in its own database.');}catch(error){setMessage(error.message,true);}});
+  $('deleteSearch').addEventListener('click',async()=>{const id=$('savedSearch').value;if(!id)return;try{await request(`/api/user-space/teaching-saved-searches?id=${encodeURIComponent(id)}`,{method:'DELETE'});data.savedSearches=data.savedSearches.filter(item=>item.id!==id);data.activeSavedSearchId='';renderSearches();setMessage('Teaching search removed.');}catch(error){setMessage(error.message,true);}});
   for(const choice of ['list','board'])$(`${choice}View`).addEventListener('click',()=>{view=choice;localStorage.setItem('alex-teaching-view',choice);render();});
   $('themeToggle').addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;localStorage.setItem('alex-teaching-theme',next);});
-  $('mobileFilters').addEventListener('click',()=>$('filters').scrollIntoView({behavior:'smooth'}));$('mobileResults').addEventListener('click',()=>$('results').scrollIntoView({behavior:'smooth'}));$('mobileBoard').addEventListener('click',()=>{view='board';render();$('jobs').scrollIntoView({behavior:'smooth'});});$('mobileRefresh').addEventListener('click',refresh);
+  $('copy').addEventListener('click',async()=>{const brief=`Teaching jobs: ${$('query').value||'English teacher / trainer'} · ${$('location').value||'any location'} · ${$('workType').value||'any work type'}`;try{await navigator.clipboard.writeText(brief);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy search brief',1500);}catch{setMessage('Clipboard access is unavailable.',true);}});
+  $('sites').addEventListener('click',event=>{const link=event.target.closest('a[data-source-name]');if(!link)return;event.preventDefault();$('sourceTitle').textContent=link.dataset.sourceName;$('sourceFrameLabel').textContent=link.dataset.sourceName;$('sourceQuery').textContent=`${$('query').value||'English teacher / trainer'} · ${$('workType').value||'any work type'}`;$('sourceLocation').textContent=$('location').selectedOptions[0]?.textContent||'Any location';$('sourceOpen').href=link.href;$('sourceFrame').src=link.href;$('sourceSplit').hidden=false;$('sourceSplit').scrollIntoView({behavior:'smooth'});});
+  $('closeSource').addEventListener('click',()=>{$('sourceFrame').src='about:blank';$('sourceSplit').hidden=true;});
+  $('goTop').addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+  $('goEnd').addEventListener('click',()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'}));
+  $('queue').addEventListener('click',()=>{renderQueue();$('queueDialog').showModal();});
+  $('closeQueue').addEventListener('click',()=>$('queueDialog').close());
+  $('mobileFilters').addEventListener('click',()=>$('filters').scrollIntoView({behavior:'smooth'}));$('mobileResults').addEventListener('click',()=>$('results').scrollIntoView({behavior:'smooth'}));$('mobileBoard').addEventListener('click',()=>{view='board';render();$('jobs').scrollIntoView({behavior:'smooth'});});$('mobileRefresh').addEventListener('click',()=>refresh());
+  renderWeightControls();
 }
 
 document.documentElement.dataset.theme=localStorage.getItem('alex-teaching-theme')||'dark';

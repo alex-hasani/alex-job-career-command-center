@@ -729,7 +729,12 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
       } else if (url.pathname === '/api/user-space/teaching-refresh' && req.method === 'POST') {
         requireSession(req,{csrf:true});
         const input=await readJson(req);
-        sendJson(res,200,{ok:true,...await teachingDashboard.refresh({query:String(input.query||'').slice(0,200),location:String(input.location||'Stuttgart').slice(0,100)})});
+        sendJson(res,200,{ok:true,...teachingDashboard.startRefresh({query:String(input.query||'').slice(0,200),location:String(input.location||'Stuttgart area').slice(0,100),includeRemoteAnywhere:Boolean(input.includeRemoteAnywhere)})});
+      } else if (url.pathname === '/api/user-space/teaching-refresh' && req.method === 'GET') {
+        requireSession(req);
+        const state=teachingDashboard.getRefresh(url.searchParams.get('id')||'');
+        if(!state) throw httpError(404,'Teaching refresh not found.','NOT_FOUND');
+        sendJson(res,200,{ok:true,...state});
       } else if (url.pathname === '/api/user-space/teaching-application-status' && req.method === 'POST') {
         requireSession(req,{csrf:true});
         const input=await readJson(req);
@@ -738,6 +743,10 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         requireSession(req,{csrf:true});
         const input=await readJson(req);
         sendJson(res,200,{ok:true,search:teachingDashboard.saveSearch(input.name,input.criteria)});
+      } else if (url.pathname === '/api/user-space/teaching-saved-searches/active' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,activeSavedSearchId:teachingDashboard.setActiveSearch(String(input.id||''))});
       } else if (url.pathname === '/api/user-space/teaching-saved-searches' && req.method === 'DELETE') {
         requireSession(req,{csrf:true});
         sendJson(res,200,{ok:true,deleted:teachingDashboard.deleteSearch(url.searchParams.get('id')||'')});

@@ -260,7 +260,12 @@ test('Teaching page and downloads require login and use only the Teaching worksp
     const deniedRefresh=response();await router.handle(post(''),deniedRefresh,new URL('http://127.0.0.1/api/user-space/teaching-refresh'));
     assert.equal(deniedRefresh.status,403);
     const allowedRefresh=response();await router.handle(post('csrf'),allowedRefresh,new URL('http://127.0.0.1/api/user-space/teaching-refresh'));
-    assert.equal(allowedRefresh.status,200);assert.equal(JSON.parse(allowedRefresh.body).checked,0);
+    assert.equal(allowedRefresh.status,200);assert.equal(JSON.parse(allowedRefresh.body).status,'running');
+    const refreshId=JSON.parse(allowedRefresh.body).id;
+    await new Promise(resolve=>setTimeout(resolve,30));
+    const progress=response();await router.handle(req,progress,new URL(`http://127.0.0.1/api/user-space/teaching-refresh?id=${refreshId}`));
+    assert.equal(progress.status,200);assert.equal(JSON.parse(progress.body).status,'completed');
+    assert.equal(JSON.parse(progress.body).result.checked,0);
     const {existsSync}=await import('node:fs');
     assert.equal(existsSync(join(configDir,'state','teaching.sqlite')),true);
     assert.equal(existsSync(join(directory,'State','job_search.sqlite')),false);
