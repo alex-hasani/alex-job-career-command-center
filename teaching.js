@@ -40,7 +40,8 @@ async function load() {
   const sources=$('#sources');sources.replaceChildren();
   for(const source of data.sources||[]) {
     const link=document.createElement('a');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open source';
-    sources.append(item(source.name,source.availability==='available'?'Available':'Availability not checked',link));
+    const kind=source.type==='shared-source'?'General source · ':'Teaching source · ';
+    sources.append(item(source.name,kind+(source.availability==='available'?'Available':'Availability not checked'),link));
   }
   if(!sources.childElementCount) sources.textContent='No Teaching sources are configured yet.';
   $('#loadStatus').textContent=`${data.documents?.length||0} documents · ${data.sources?.length||0} Teaching sources`;

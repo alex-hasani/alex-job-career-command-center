@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sortTeachingSources, teachingDocument, teachingOverview, teachingPaths } from './teaching-space.mjs';
+import { sharedTeachingSources, sortTeachingSources, teachingDocument, teachingOverview, teachingPaths } from './teaching-space.mjs';
 
 test('Teaching workspace paths stay outside IT state and source directories', () => {
   const paths=teachingPaths('E:/Projects/Job Search');
@@ -11,6 +11,22 @@ test('Teaching workspace paths stay outside IT state and source directories', ()
   assert.match(paths.documents,/Documents[\\/]Teaching/);
   assert.match(paths.state,/Teaching_Job_Search/);
   assert.doesNotMatch(paths.state,/dynamic-job-dashboard|[\\/]State[\\/]job_search\.sqlite/);
+});
+
+test('Teaching inherits general job boards without importing IT-only or overseas sources', async () => {
+  const workspace=await mkdtemp(join(tmpdir(),'teaching-source-pool-'));
+  const sourceFile=join(workspace,'additional-job-sources.json');
+  await writeFile(sourceFile,JSON.stringify([
+    {name:'General Jobs',kind:'General job board',url:'https://jobs.example/',searchUrlTemplate:'https://jobs.example/?q=IT'},
+    {name:'Tech Jobs',kind:'IT job board',url:'https://tech.example/'},
+    {name:'China Jobs',kind:'General job board',url:'https://china.example/',market:'China'},
+    {name:'Unsafe',kind:'General job board',url:'file:///etc/passwd'}
+  ]));
+  try {
+    assert.deepEqual(await sharedTeachingSources(sourceFile),[
+      {name:'General Jobs',url:'https://jobs.example/',type:'shared-source',availability:'not_checked'}
+    ]);
+  } finally {await rm(workspace,{recursive:true,force:true});}
 });
 test('Teaching sources sort by availability then name', () => {
   const sorted=sortTeachingSources([

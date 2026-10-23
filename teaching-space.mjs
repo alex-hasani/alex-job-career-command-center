@@ -26,6 +26,9 @@ export async function teachingOverview(workspace) {
   const officialSources=(Array.isArray(config.officialSources)?config.officialSources:[])
     .filter(source => source && typeof source.name==='string' && /^https:\/\//i.test(source.url||''))
     .map(source => ({ name:source.name, url:source.url, type:source.type||'employer-careers', availability:source.availability||'not_checked' }));
+  const sharedSources=config.inheritGeneralSourcePool
+    ? await sharedTeachingSources(join(resolve(workspace), 'dynamic-job-dashboard', 'additional-job-sources.json'))
+    : [];
   const names=await readdir(paths.documents).catch(error => error.code==='ENOENT' ? [] : Promise.reject(error));
   const documents=await Promise.all(names.filter(name => documentName.test(name) && /(?:^|_)Teaching_(?:CV|Cover_Letter)_/i.test(name)).map(async name => {
     const item=await stat(join(paths.documents,name));
@@ -36,10 +39,23 @@ export async function teachingOverview(workspace) {
     targetRegion:config.targetRegion||'',
     roleFamilies:Array.isArray(config.roleFamilies)?config.roleFamilies:[],
     keywords:Array.isArray(config.keywords)?config.keywords:[],
-    sources:sortTeachingSources(officialSources),
+    sources:sortTeachingSources([...officialSources,...sharedSources]),
     documents:documents.filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name,'en')),
     liveSearchReady:false
   };
+}
+
+export async function sharedTeachingSources(sourceFile) {
+  const text=await readFile(sourceFile,'utf8').catch(error => error.code==='ENOENT' ? '[]' : Promise.reject(error));
+  const sources=JSON.parse(text);
+  if(!Array.isArray(sources)) return [];
+  return sources.filter(source => {
+    if(!source || typeof source.name!=='string' || !/^https:\/\//i.test(source.url||'')) return false;
+    if(source.market && !/Germany|Europe/i.test(source.market)) return false;
+    const description=`${source.name} ${source.kind||''}`;
+    return /job board|job aggregator|employment service|academic|public-sector|recruiter/i.test(description)
+      && !/\bIT\b|tech|developer|engineering|STEM|software|cloud|SAP/i.test(description);
+  }).map(source => ({name:source.name,url:source.url,type:'shared-source',availability:'not_checked'}));
 }
 
 export async function teachingDocument(workspace, requestedName) {
