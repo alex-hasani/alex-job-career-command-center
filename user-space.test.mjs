@@ -87,6 +87,8 @@ test('ATS refinement prioritizes only source evidence and keeps missing terms re
 
 test('landing copy states the career outcome and preserves the evidence-only promise', async () => {
   const html = await readFile(new URL('./user-space.html', import.meta.url), 'utf8');
+  assert.match(html, /<title>Alex Job<\/title>/);
+  assert.match(html, /<h1>Alex Job<\/h1>/);
   assert.match(html, /Turn your real experience into interview-ready applications\./);
   assert.match(html, /using only your verified skills, experience, and achievements\./);
   assert.match(html, /href="\/dashboard"/);
@@ -102,6 +104,17 @@ test('landing copy states the career outcome and preserves the evidence-only pro
   assert.match(html, /id="documentLibrary"/);
   assert.match(html, /data-dialog="skillsDialog"/);
   assert.match(html, /id="skillsLibrary"/);
+});
+
+test('Alex Job stays the app name while direction headings identify each workspace', async () => {
+  const dashboard = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const teaching = await readFile(new URL('./teaching.html', import.meta.url), 'utf8');
+  assert.match(dashboard, /<title>Alex Job<\/title>/);
+  assert.match(dashboard, /<span class="mark">AJ<\/span>Alex Job/);
+  assert.doesNotMatch(dashboard, /flexible IT job search/);
+  assert.match(dashboard, /<h1>IT Jobs<\/h1>/);
+  assert.match(teaching, /<title>Alex Job<\/title>/);
+  assert.match(teaching, /<h1>Teaching Jobs<\/h1>/);
 });
 
 test('protected Alex assets are copied into private storage once and source files stay unchanged', async () => {
