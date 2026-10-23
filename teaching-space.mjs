@@ -9,7 +9,8 @@ export function teachingPaths(workspace) {
   return {
     config:join(project, 'Teaching_Job_Search', 'teaching-search-config.json'),
     documents:join(project, 'Documents', 'Teaching'),
-    state:join(project, 'Teaching_Job_Search', 'state')
+    state:join(project, 'Teaching_Job_Search', 'state'),
+    database:join(project, 'Teaching_Job_Search', 'state', 'teaching.sqlite')
   };
 }
 export function sortTeachingSources(sources) {

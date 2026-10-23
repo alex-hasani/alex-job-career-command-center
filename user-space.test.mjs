@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { buildStoredZip, createUserSpaceRouter, hashPassword, verifyPassword, openUserSpaceDatabase, profileFromCanonical, readMobileDownloadRegistry, refineResumeEvidence } from './user-space.mjs';
 
 test('passwords use salted scrypt hashes and verify without storing plaintext', async () => {
@@ -230,5 +231,42 @@ test('dashboard keeps its existing inline application UI while login pages retai
     assert.equal(response.status,200);
     assert.match(response.headers['content-security-policy'],/style-src 'self' 'unsafe-inline'/);
     assert.match(response.headers['content-security-policy'],/script-src 'self' 'unsafe-inline'/);
+  } finally {router.close();await rm(directory,{recursive:true,force:true});}
+});
+
+test('Teaching page and downloads require login and use only the Teaching workspace', async () => {
+  const directory=await mkdtemp(join(tmpdir(),'alex-job-teaching-route-'));
+  const configDir=join(directory,'Teaching_Job_Search'),documents=join(directory,'Documents','Teaching');
+  await import('node:fs/promises').then(({mkdir})=>Promise.all([mkdir(configDir,{recursive:true}),mkdir(documents,{recursive:true})]));
+  await writeFile(join(directory,'teaching.html'),'<h1>Teaching workspace</h1>');
+  await writeFile(join(configDir,'teaching-search-config.json'),JSON.stringify({targetRegion:'Stuttgart',officialSources:[]}));
+  const documentName='Example_Teaching_CV_EN_2026-10-22.pdf';
+  await writeFile(join(documents,documentName),'Teaching-only PDF');
+  const router=createUserSpaceRouter({root:directory,workspace:directory}),createdAt='2026-10-22T00:00:00.000Z',token='teaching-session';
+  router.db.prepare('INSERT INTO users(id,username,display_name,role,password_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run('teacher-id','teacher','Teacher','user','hash',createdAt,createdAt);
+  router.db.prepare('INSERT INTO sessions(token_hash,user_id,csrf_token,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?,?)').run(createHash('sha256').update(token).digest('hex'),'teacher-id','csrf',createdAt,'2099-01-01T00:00:00.000Z',createdAt);
+  const response=()=>({status:0,headers:{},body:'',writeHead(status,headers){this.status=status;this.headers=headers;},end(body=''){this.body=String(body);}});
+  try {
+    const unauthorised=response();
+    await router.handle({method:'GET',headers:{},socket:{}},unauthorised,new URL('http://127.0.0.1/api/user-space/teaching-overview'));
+    assert.equal(unauthorised.status,401);
+    const req={method:'GET',headers:{cookie:`alex_job_session=${token}`},socket:{}};
+    const page=response();await router.handle(req,page,new URL('http://127.0.0.1/teaching'));
+    assert.equal(page.status,200);assert.match(page.body,/Teaching workspace/);
+    const overview=response();await router.handle(req,overview,new URL('http://127.0.0.1/api/user-space/teaching-overview'));
+    assert.equal(overview.status,200);assert.equal(JSON.parse(overview.body).documents.length,1);
+    assert.equal(JSON.parse(overview.body).databaseStats.total,0);
+    const post=(csrf)=>Object.assign(Readable.from([Buffer.from('{}')]),{method:'POST',headers:{host:'127.0.0.1',origin:'http://127.0.0.1',cookie:`alex_job_session=${token}`,...(csrf?{'x-csrf-token':csrf}:{})},socket:{}});
+    const deniedRefresh=response();await router.handle(post(''),deniedRefresh,new URL('http://127.0.0.1/api/user-space/teaching-refresh'));
+    assert.equal(deniedRefresh.status,403);
+    const allowedRefresh=response();await router.handle(post('csrf'),allowedRefresh,new URL('http://127.0.0.1/api/user-space/teaching-refresh'));
+    assert.equal(allowedRefresh.status,200);assert.equal(JSON.parse(allowedRefresh.body).checked,0);
+    const {existsSync}=await import('node:fs');
+    assert.equal(existsSync(join(configDir,'state','teaching.sqlite')),true);
+    assert.equal(existsSync(join(directory,'State','job_search.sqlite')),false);
+    const download=response();await router.handle(req,download,new URL(`http://127.0.0.1/api/user-space/teaching-documents/${documentName}`));
+    assert.equal(download.status,200);assert.equal(download.body,'Teaching-only PDF');
+    const rejected=response();await router.handle(req,rejected,new URL('http://127.0.0.1/api/user-space/teaching-documents/..%2Fsecrets.pdf'));
+    assert.equal(rejected.status,404);
   } finally {router.close();await rm(directory,{recursive:true,force:true});}
 });

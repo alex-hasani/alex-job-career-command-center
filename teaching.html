@@ -4,38 +4,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Alex Job</title>
-  <link rel="stylesheet" href="/teaching.css">
+  <link rel="stylesheet" href="/teaching.css?v=2">
 </head>
 <body>
   <main class="shell">
-    <nav class="topbar" aria-label="Career direction">
-      <a href="/profile">Profile</a>
-      <a href="/dashboard">IT Jobs</a>
-      <span aria-current="page">Teaching Jobs</span>
-    </nav>
-    <header class="hero">
-      <p class="eyebrow">ALEX JOB</p>
-      <h1>Teaching Jobs</h1>
-      <p>Teaching documents and sources have their own workspace. The IT Jobs database and dashboard remain separate.</p>
-    </header>
-    <p id="loadStatus" class="status" role="status">Loading Teaching workspace…</p>
-    <section class="grid" aria-label="Teaching workspace">
-      <div class="card">
-        <h2>Teaching documents</h2>
-        <p>General CVs and cover letters. Downloads stay on this page.</p>
-        <div id="documents" class="items"></div>
-      </div>
-      <div class="card">
-        <h2>Teaching sources and general boards</h2>
-        <p id="region"></p>
-        <div id="sources" class="items"></div>
-      </div>
-    </section>
-    <section class="card next-stage">
-      <h2>Live Teaching search</h2>
-      <p>Teaching-specific sources and suitable general boards are available above. Live posting verification, the separate application tracker, tailored documents and the Teaching Chrome helper are being connected in stages. No Teaching result will enter the IT Jobs database.</p>
-    </section>
+    <header class="top"><div class="brand"><span class="mark">AJ</span>Alex Job</div><nav class="top-actions" aria-label="Career direction"><a href="/profile">Profile</a><a href="/dashboard">IT Jobs</a><span aria-current="page">Teaching Jobs</span><button id="themeToggle" type="button">Theme</button></nav></header>
+    <section class="hero"><p class="eyebrow">Alex Job</p><h1>Teaching Jobs</h1><p>Flexible filtering, verified matching, and a transparent source network.</p><p>Teaching jobs, applications, saved searches, and documents stay in a separate workspace and SQLite database.</p></section>
+    <div class="grid">
+      <aside class="panel filter" id="filters">
+        <div class="bar"><h2>Flexible filters</h2><button id="clear" class="link" type="button">Clear all</button></div>
+        <div class="saved-searches"><select id="savedSearch" aria-label="Saved searches"><option value="">Saved searches</option></select><div class="saved-actions"><button id="saveSearch" type="button" aria-label="Save search">＋</button><button id="deleteSearch" type="button" aria-label="Delete search">−</button></div></div>
+        <button class="refresh" id="refresh" type="button">Refresh live results</button><p class="hint">Only exact, open Teaching posting pages with a stated title, employer, location and URL enter this database.</p>
+        <div class="field"><label for="query">Position, skill or Boolean search</label><input id="query" placeholder="e.g. English teacher OR ESL"></div>
+        <div class="field"><label for="location">Location</label><input id="location" value="Stuttgart" placeholder="e.g. Stuttgart"></div>
+        <div class="field"><label for="company">Company</label><input id="company" placeholder="e.g. Berlitz"></div>
+        <div class="split"><div class="field"><label for="sourceSelect">Source</label><select id="sourceSelect"><option value="">All sources</option></select></div><div class="field"><label for="applicationStatus">Application status</label><select id="applicationStatus"><option value="">Any status</option><option>Not recorded</option><option>Preparing</option><option>Applied</option><option>Interviewing</option><option>Offer</option><option>Rejected</option><option>Silent</option><option>Case Closed</option></select></div></div>
+        <div class="split"><div class="field"><label for="workType">Work type</label><select id="workType"><option value="">Any</option><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Not stated</option></select></div><div class="field"><label for="model">Work model</label><select id="model"><option value="">Any</option><option value="remote">Remote / hybrid</option><option value="onsite">On-site / not stated</option></select></div></div>
+        <div class="field"><label for="freshness">Posted</label><select id="freshness"><option value="">Any time</option><option value="7">Past week</option><option value="30">Past month</option></select></div><p class="filterfoot" id="filterStatus">Loading Teaching jobs…</p>
+      </aside>
+      <section class="results" id="results">
+        <div class="metrics"><div class="panel metric"><span>Live roles</span><b id="count">0</b><small>verified, deduplicated</small></div><div class="panel metric"><span>Recommended now</span><b id="strongCount">0</b><small>Teaching-aligned</small></div><div class="panel metric"><span>Sources online</span><b id="online">0</b><small>verified posting sources</small></div><div class="panel metric"><span>Application tracker</span><b id="appliedCount">0</b><small>Teaching only</small></div><div class="panel metric"><span>SQLite records</span><b id="dbCount">0</b><small>separate local database</small></div></div>
+        <div class="sync-state"><span class="sync-chip" id="loadStatus" role="status">Loading Teaching database…</span></div>
+        <details class="panel network"><summary><h2>Source availability</h2><span class="muted" id="networkSummary">Open to see source status</span></summary><div id="sources" class="sources"></div></details>
+        <section class="panel search"><div class="searchrow"><input id="search" type="search" placeholder="Narrow loaded results instantly…"><select id="sort"><option value="priority">Sort: application priority</option><option value="match">Sort: interview fit</option><option value="newest">Sort: newest</option><option value="company">Sort: company</option><option value="source">Sort: source</option></select></div><p class="hint">Filters update saved results instantly. Refresh checks live Teaching sources.</p></section>
+        <div class="sectionhead"><div><h2>Evidence-led opportunities</h2><p id="subtitle">Verified Teaching postings appear here.</p></div><div class="view-toggle"><span id="resultCount" class="muted"></span><button id="listView" class="active" type="button">List</button><button id="boardView" type="button">Board</button></div></div>
+        <div class="cards" id="jobs"><div class="panel empty">No verified Teaching postings saved yet. Refresh to check current sources.</div></div>
+        <details class="panel directory"><summary><h2>Direct source directory</h2><span class="muted">Teaching employers and general job boards</span></summary><div id="sites" class="sitegrid"></div></details>
+        <details class="panel directory documents"><summary><h2>Teaching documents</h2><span class="muted">CVs and cover letters</span></summary><div id="documents" class="document-grid"></div></details>
+      </section>
+    </div>
+    <nav class="mobile-nav" aria-label="Mobile navigation"><button id="mobileFilters" type="button">Filters</button><button id="mobileResults" type="button">Results</button><button id="mobileBoard" type="button">Board</button><button id="mobileRefresh" type="button">Refresh</button></nav>
   </main>
-  <script type="module" src="/teaching.js"></script>
+  <script type="module" src="/teaching.js?v=2"></script>
 </body>
 </html>

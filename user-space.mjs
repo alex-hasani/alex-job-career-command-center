@@ -5,7 +5,8 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { teachingDocument, teachingOverview } from './teaching-space.mjs';
+import { teachingDocument } from './teaching-space.mjs';
+import { createTeachingDashboard } from './teaching-dashboard.mjs';
 
 const scrypt = promisify(scryptCallback);
 const PASSWORD_N = 2 ** 15;
@@ -360,6 +361,7 @@ export async function readMobileDownloadRegistry(workspace, registryPath=join(wo
 
 export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json') }) {
   const db = openUserSpaceDatabase(databasePath);
+  const teachingDashboard = createTeachingDashboard({ workspace });
   if(protectedAdminProfile) {
     const protectedAdminId=db.prepare("SELECT value FROM user_space_settings WHERE key='global_admin_user_id'").get()?.value;
     if(protectedAdminId) {
@@ -723,7 +725,22 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         await listMobileDownloads(req,res);
       } else if (url.pathname === '/api/user-space/teaching-overview' && req.method === 'GET') {
         requireSession(req);
-        sendJson(res,200,{ok:true,...await teachingOverview(workspace)});
+        sendJson(res,200,{ok:true,...await teachingDashboard.overview()});
+      } else if (url.pathname === '/api/user-space/teaching-refresh' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,...await teachingDashboard.refresh({query:String(input.query||'').slice(0,200),location:String(input.location||'Stuttgart').slice(0,100)})});
+      } else if (url.pathname === '/api/user-space/teaching-application-status' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,job:teachingDashboard.updateStatus(String(input.id||''),String(input.status||''),String(input.comment||''))});
+      } else if (url.pathname === '/api/user-space/teaching-saved-searches' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,search:teachingDashboard.saveSearch(input.name,input.criteria)});
+      } else if (url.pathname === '/api/user-space/teaching-saved-searches' && req.method === 'DELETE') {
+        requireSession(req,{csrf:true});
+        sendJson(res,200,{ok:true,deleted:teachingDashboard.deleteSearch(url.searchParams.get('id')||'')});
       } else if (url.pathname.startsWith('/api/user-space/teaching-documents/') && req.method === 'GET') {
         requireSession(req);
         const item=await teachingDocument(workspace,decodeURIComponent(url.pathname.slice('/api/user-space/teaching-documents/'.length)));
@@ -749,5 +766,5 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     return true;
   }
 
-  return { handle, extensionContext, db, ready:protectedAssetsReady, close:() => db.close() };
+  return { handle, extensionContext, db, ready:protectedAssetsReady, close:() => { teachingDashboard.close(); db.close(); } };
 }
