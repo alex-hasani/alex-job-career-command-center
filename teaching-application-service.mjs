@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
@@ -8,6 +8,7 @@ import { teachingPaths } from './teaching-space.mjs';
 
 const LANGUAGES = ['en', 'de'];
 const TYPES = ['cv', 'coverLetter'];
+const TEXT_TYPES = [...TYPES, 'remarks'];
 const HTML_ESCAPE = value => String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const XML_DECODE = value => String(value || '').replace(/&(?:amp|lt|gt|quot|apos);/g, entity => ({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'"}[entity]));
 const clean = value => String(value || '').replace(/\s+/g,' ').trim();
@@ -48,6 +49,12 @@ function makeLetter(job, language, evidence) {
   return language==='de'
     ? `Bewerbung als ${role} bei ${company}\n\nSehr geehrte Damen und Herren,\n\nich bewerbe mich für die Position ${role} bei ${company}. Meine Erfahrung umfasst Vollzeitunterricht für Kinder und Jugendliche in China und Iran sowie die Vorbereitung von Unterrichtsplänen, Materialien und Nachbereitung.\n\n${first}\n\n${second}\n\nGerne erläutere ich Ihnen in einem Gespräch, wie meine Unterrichtserfahrung zu Ihrer Stelle passt. Ich bin ab sofort oder jeweils zum Beginn des nächsten Monats verfügbar.\n\nMit freundlichen Grüßen\nDemo Candidate`
     : `Application for ${role} at ${company}\n\nDear Hiring Team,\n\nI am applying for the ${role} position at ${company}. My background includes full-time English teaching for children and young learners in China and Iran, with lesson planning, materials preparation and after-class follow-up.\n\n${first}\n\n${second}\n\nI would welcome a conversation about how my teaching experience fits your role. I am available immediately or at the beginning of the next month.\n\nKind regards\nDemo Candidate`;
+}
+function makeRemarks(job,language,evidence){
+  const role=clean(job.title),company=clean(job.company),proof=evidence.slice(0,2).join(' ');
+  return language==='de'
+    ? `Ich bewerbe mich als ${role} bei ${company}. Meine Erfahrung umfasst Englischunterricht für Kinder und Jugendliche, Unterrichtsplanung und Unterrichtsnachbereitung.${proof?` ${proof}`:''}`
+    : `I am applying for the ${role} role at ${company}. My experience includes English teaching for children and young learners, lesson planning and after-class follow-up.${proof?` ${proof}`:''}`;
 }
 function makeCv(source, job, language, evidence) {
   const focus=language==='de' ? 'BEWERBUNGSFOKUS' : 'APPLICATION FOCUS';
@@ -98,31 +105,56 @@ export function createTeachingApplicationService({workspace}) {
       const base=`/api/user-space/teaching-application-package/download?id=${encodeURIComponent(data.job.id)}&type=${type}&language=${language}&version=${active.version}`;
       return [language,{body:active.text[type][language],document:{fileName:active.files[type][language].docx,downloadUrl:`${base}&format=docx`,pdfDownloadUrl:`${base}&format=pdf`}}];
     }))]));
-    return {job:data.job,posting:{text:data.posting.text,source:data.posting.source},currentVersion:data.currentVersion,history:data.versions.map(item=>({version:item.version,createdAt:item.createdAt})),documents,quality:{jdComplete:true,applicationReady:true},updatedAt:data.updatedAt};
+    documents.remarks=Object.fromEntries(LANGUAGES.map(language=>[language,{body:active.text.remarks?.[language]||''}]));
+    return {job:data.job,posting:{text:data.posting.text,source:data.posting.source},currentVersion:data.currentVersion,history:data.versions.map(item=>({version:item.version,createdAt:item.createdAt,changeType:item.changeType||'full'})),documents,quality:{jdComplete:true,applicationReady:true},updatedAt:data.updatedAt};
   }
-  async function prepare(job, suppliedDescription='') {
-    if(!job?.id || !job?.title || !job?.company || !job?.url) throw new Error('Select a verified Teaching job first');
-    const posting=clean(suppliedDescription || job.description);
-    if(posting.length<350) throw new Error('Paste the complete job description before preparing a Teaching application');
-    const existing=await read(job),version=(existing?.currentVersion||0)+1;
-    const folder=join(root,safeKey(job),`v${version}`);
+  async function writeVersion(job,data,text,changeType) {
+    const version=data.currentVersion+1,folder=join(root,safeKey(job),`v${version}`),files={cv:{},coverLetter:{}},headers={};
     await mkdir(folder,{recursive:true});
-    const text={cv:{},coverLetter:{}},files={cv:{},coverLetter:{}},headers={};
-    for(const language of LANGUAGES) {
-      const source=await masterParagraphs(await pickMaster(paths,language));
-      headers[language]=source.slice(0,3);
-      const evidence=relevantEvidence(source,posting);
-      text.cv[language]=makeCv(source,job,language,evidence);
-      text.coverLetter[language]=makeLetter(job,language,evidence);
-      for(const type of TYPES) {
+    for(const language of LANGUAGES){
+      const master=await masterParagraphs(await pickMaster(paths,language));headers[language]=master.slice(0,3);
+      for(const type of TYPES){
         const stem=fileStem(job,type,language,version);
         files[type][language]={docx:`${stem}.docx`,pdf:`${stem}.pdf`};
-        await writeDocx(join(folder,files[type][language].docx),text[type][language],type,source);
+        await writeDocx(join(folder,files[type][language].docx),text[type][language],type,master);
       }
     }
-    const data={version:1,job:{id:job.id,title:job.title,company:job.company,location:job.location,url:job.url},posting:{text:posting,source:suppliedDescription?'user-pasted full job description':'verified Teaching posting'},currentVersion:version,versions:[...(existing?.versions||[]),{version,createdAt:new Date().toISOString(),text,files,headers}],updatedAt:new Date().toISOString()};
-    await writeFile(packagePath(job),JSON.stringify(data,null,2),'utf8');
-    return publicPackage(data);
+    const updated={...data,currentVersion:version,versions:[...data.versions,{version,createdAt:new Date().toISOString(),changeType,text,files,headers}],updatedAt:new Date().toISOString()};
+    const target=packagePath(job),temporary=`${target}.${process.pid}.tmp`;
+    await writeFile(temporary,JSON.stringify(updated,null,2),'utf8');await rename(temporary,target);
+    return publicPackage(updated);
+  }
+  async function prepare(job, suppliedDescription='', scope='full') {
+    if(!job?.id || !job?.title || !job?.company || !job?.url) throw new Error('Select a verified Teaching job first');
+    if(!['full','cv','coverLetter'].includes(scope)) throw new Error('Unsupported Teaching regeneration scope');
+    const existing=await read(job),posting=clean(suppliedDescription || existing?.posting?.text || job.description);
+    if(posting.length<350) throw new Error('Paste the complete job description before preparing a Teaching application');
+    const current=existing?.versions.find(item=>item.version===existing.currentVersion),text={cv:{},coverLetter:{},remarks:{}};
+    for(const language of LANGUAGES) {
+      const source=await masterParagraphs(await pickMaster(paths,language));
+      const evidence=relevantEvidence(source,posting);
+      text.cv[language]=scope==='coverLetter'&&current?.text?.cv?.[language]||makeCv(source,job,language,evidence);
+      text.coverLetter[language]=scope==='cv'&&current?.text?.coverLetter?.[language]||makeLetter(job,language,evidence);
+      text.remarks[language]=scope==='full'||!current?.text?.remarks?.[language]?makeRemarks(job,language,evidence):current.text.remarks[language];
+    }
+    const data=existing||{version:1,job:{id:job.id,title:job.title,company:job.company,location:job.location,url:job.url},posting:{text:posting,source:suppliedDescription?'user-pasted full job description':'verified Teaching posting'},currentVersion:0,versions:[],updatedAt:''};
+    data.posting={text:posting,source:suppliedDescription?'user-pasted full job description':existing?.posting?.source||'verified Teaching posting'};
+    return writeVersion(job,data,text,scope);
+  }
+  async function save(job,type,language,body) {
+    if(!TEXT_TYPES.includes(type)||!LANGUAGES.includes(language)) throw new Error('Unsupported Teaching document selection');
+    const value=String(body||'').trim();if(value.length<(type==='remarks'?20:80)||value.length>(type==='remarks'?5000:30000)) throw new Error('Review the complete Teaching document before saving');
+    const data=await read(job);if(!data) throw new Error('Prepare a Teaching application package first');
+    const current=data.versions.find(item=>item.version===data.currentVersion),text=structuredClone(current.text);
+    text.remarks||={de:'',en:''};
+    text[type][language]=value;
+    return writeVersion(job,data,text,`edited ${language.toUpperCase()} ${type}`);
+  }
+  async function restore(job,version) {
+    const data=await read(job);if(!data) throw new Error('Prepare a Teaching application package first');
+    const prior=data.versions.find(item=>item.version===Number(version));
+    if(!prior) throw new Error('Teaching package version not found');
+    return writeVersion(job,data,structuredClone(prior.text),`restored v${prior.version}`);
   }
   async function download(job,language='en',format='docx',type='cv',version=null) {
     if(!LANGUAGES.includes(language)||!TYPES.includes(type)||!['docx','pdf'].includes(format)) throw new Error('Unsupported Teaching document selection');
@@ -138,5 +170,5 @@ export function createTeachingApplicationService({workspace}) {
     }
     return {path,fileName:name,contentType:format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};
   }
-  return {read:async job=>{const data=await read(job);return data?publicPackage(data):null;},prepare,download};
+  return {read:async job=>{const data=await read(job);return data?publicPackage(data):null;},prepare,save,restore,download};
 }

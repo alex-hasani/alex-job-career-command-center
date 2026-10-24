@@ -18,9 +18,8 @@ export function filterTeachingJobs(jobs, criteria, cityOptions=[], now=Date.now(
   const rows=(jobs || []).filter(job=>{
     const posted=job.posted || job.postedAt || '';
     const age=posted && Number.isFinite(Date.parse(posted)) ? (now-Date.parse(posted))/86400000 : null;
-    const combined=[job.title,job.company,job.description,job.location].join(' ');
     return matchesBooleanText(job,c.query) &&
-      (!c.search || text(combined).includes(text(c.search).trim())) &&
+      matchesBooleanText(job,c.search) &&
       (c.location==='Germany' || matchesLocation(job,c.location,cityOptions,Boolean(c.includeRemoteAnywhere))) &&
       (!c.company || text(job.company).includes(text(c.company).trim())) &&
       matchesSource(job,c.sourceSelect) &&

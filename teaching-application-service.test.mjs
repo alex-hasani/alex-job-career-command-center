@@ -14,8 +14,8 @@ test('Teaching application packages use Teaching masters and Teaching-only versi
     await mkdir(docs,{recursive:true});
     for(const language of ['EN','DE']){
       const fixture=new Document({sections:[{children:[
-        new Paragraph('Demo Candidate'),new Paragraph('English Language Teacher'),new Paragraph('Sample City | candidate@example.com'),
-        new Paragraph('TEACHING EXPERIENCE'),new Paragraph('English Teacher | Example Language Institute | 2022-present'),
+        new Paragraph('Demo Candidate'),new Paragraph('English Language Teacher'),new Paragraph('Stuttgart | demo@example.org'),
+        new Paragraph('TEACHING EXPERIENCE'),new Paragraph('English Teacher | Sample Language Centre | 2022-present'),
         new Paragraph('• Planned lessons for young learners and prepared teaching props and after-class follow-up.'),
         new Paragraph('• Trained teachers and supported classroom management.')
       ]}]});
@@ -28,8 +28,9 @@ test('Teaching application packages use Teaching masters and Teaching-only versi
     assert.equal(first.currentVersion,1);
     assert.equal(first.quality.applicationReady,true);
     assert.match(first.documents.cv.en.body,/English Teacher \| Example School/);
-    assert.match(first.documents.cv.en.body,/Example Language Institute/);
+    assert.match(first.documents.cv.en.body,/Sample Language Centre/);
     assert.match(first.documents.coverLetter.de.body,/Example School/);
+    assert.match(first.documents.remarks.en.body,/English Teacher.*Example School/);
     const item=await service.download(job,'en','docx','cv');
     assert.match(item.path,/Documents[\\/]Teaching[\\/]Applications/);
     const zip=await JSZip.loadAsync(await readFile(item.path));
@@ -40,5 +41,20 @@ test('Teaching application packages use Teaching masters and Teaching-only versi
     const second=await service.prepare(job);
     assert.equal(second.currentVersion,2);
     assert.equal((await service.read(job)).history.length,2);
+    const edited=await service.save(job,'cv','en',`${second.documents.cv.en.body}\n• Prepared classroom props and after-class follow-up.`);
+    assert.equal(edited.currentVersion,3);
+    assert.match(edited.documents.cv.en.body,/classroom props/);
+    const letterOnly=await service.prepare(job,'','coverLetter');
+    assert.equal(letterOnly.currentVersion,4);
+    assert.equal(letterOnly.documents.cv.en.body,edited.documents.cv.en.body);
+    const restored=await service.restore(job,1);
+    assert.equal(restored.currentVersion,5);
+    assert.equal(restored.documents.cv.en.body,first.documents.cv.en.body);
+    assert.equal(restored.history.length,5);
+    const note=await service.save(job,'remarks','de','Ich habe Englisch unterrichtet und Unterrichtspläne vorbereitet.');
+    assert.equal(note.currentVersion,6);
+    assert.match(note.documents.remarks.de.body,/Unterrichtspläne/);
+    assert.equal((await service.read(job)).documents.remarks.de.body,note.documents.remarks.de.body);
+    await assert.rejects(service.save(job,'cv','en','short'),/Review the complete/);
   } finally {await rm(workspace,{recursive:true,force:true});}
 });

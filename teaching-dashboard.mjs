@@ -183,6 +183,15 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
     return db.updateApplication(id,{applicationStatus:status,applicationComment:comment,...(statusChanged?{applicationStatusChangedAt:new Date().toISOString()}:{}),changeSource:'user'});
   }
 
+  function setApplicationUrl(id,value) {
+    const current=db.getJob(id);
+    if(!current) throw new Error('Teaching job was not found');
+    let target;
+    try{target=new URL(String(value||'').trim());}catch{throw new Error('Enter the exact HTTPS application link');}
+    if(target.protocol!=='https:'||target.username||target.password||!target.hostname.includes('.')||/^(?:localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?)/i.test(target.hostname)) throw new Error('Enter a public HTTPS application link');
+    return db.updateApplication(id,{applicationUrl:target.href,changeSource:'user'});
+  }
+
   function markSent(id,delivery,source='teaching-fast-apply') {
     const current=db.getJob(id);
     if(!current) throw new Error('Teaching job was not found');
@@ -208,5 +217,5 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
     if(deleted && db.getMetadata('active_saved_search')?.value===id) db.setMetadata('active_saved_search','');
     return deleted;
   }
-  return {overview,refresh,startRefresh,getRefresh,getJob:id=>db.getJob(id),resolvePage,updateStatus,markSent,saveSearch,setActiveSearch,deleteSearch,close:()=>db.db.close(),databasePath:paths.database};
+  return {overview,refresh,startRefresh,getRefresh,getJob:id=>db.getJob(id),resolvePage,updateStatus,setApplicationUrl,markSent,saveSearch,setActiveSearch,deleteSearch,close:()=>db.db.close(),databasePath:paths.database};
 }

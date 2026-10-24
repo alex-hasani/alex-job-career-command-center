@@ -436,6 +436,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     ['/teaching/', ['teaching.html', 'text/html; charset=utf-8']],
     ['/teaching.js', ['teaching.js', 'text/javascript; charset=utf-8']],
     ['/teaching.css', ['teaching.css', 'text/css; charset=utf-8']],
+    ['/teaching-parity.css', ['teaching-parity.css', 'text/css; charset=utf-8']],
     ['/user-space.js', ['user-space.js', 'text/javascript; charset=utf-8']],
     ['/user-space.css', ['user-space.css', 'text/css; charset=utf-8']],
   ]);
@@ -805,7 +806,17 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         requireSession(req,{csrf:true});
         const input=await readJson(req),job=teachingDashboard.getJob(String(input.id||''));
         if(!job) throw httpError(404,'Teaching job not found.','NOT_FOUND');
-        sendJson(res,200,{ok:true,package:await teachingApplications.prepare(job,String(input.description||''))});
+        const action=String(input.action||'prepare');
+        const pkg=action==='save'?await teachingApplications.save(job,String(input.type||''),String(input.language||''),String(input.body||''))
+          :action==='restore'?await teachingApplications.restore(job,input.version)
+          :action==='prepare'?await teachingApplications.prepare(job,String(input.description||''),String(input.scope||'full'))
+          :null;
+        if(!pkg) throw httpError(400,'Unsupported Teaching package action.','INVALID_ACTION');
+        sendJson(res,200,{ok:true,package:pkg});
+      } else if (url.pathname === '/api/user-space/teaching-application-link' && req.method === 'POST') {
+        requireSession(req,{csrf:true});
+        const input=await readJson(req);
+        sendJson(res,200,{ok:true,job:teachingDashboard.setApplicationUrl(String(input.id||''),String(input.url||''))});
       } else if (url.pathname === '/api/user-space/teaching-application-package/download' && req.method === 'GET') {
         requireSession(req);
         const job=teachingDashboard.getJob(url.searchParams.get('id')||'');
@@ -843,7 +854,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
         if(!publicId) throw httpError(409,'Export and install the Teaching Chrome helper first.','TEACHING_HELPER_REQUIRED');
         const pkg=await teachingApplications.read(job);
         if(!pkg?.quality?.applicationReady) throw httpError(409,'Prepare the Teaching CV and cover letter first.','PACKAGE_REQUIRED');
-        sendJson(res,202,{ok:true,session:await teachingAgent(publicId,session.row.user_id).start(job,pkg,String(input.language||'en'))});
+        sendJson(res,202,{ok:true,session:await teachingAgent(publicId,session.row.user_id).start({...job,url:job.applicationUrl||job.url},pkg,String(input.language||'en'))});
       } else if (url.pathname === '/api/user-space/teaching-website-apply/status' && req.method === 'GET') {
         const session=requireSession(req),publicId=teachingExtensionFor(session.row.user_id);
         sendJson(res,200,{ok:true,session:publicId?teachingAgent(publicId,session.row.user_id).status(url.searchParams.get('id')||''):null,helperReady:Boolean(publicId)});

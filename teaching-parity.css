@@ -1,0 +1,85 @@
+/* Teaching-only presentation parity. The IT dashboard stylesheet is unchanged. */
+.field>label.check{display:flex;align-items:flex-start;gap:9px;margin:9px 0;color:var(--ink);font-size:12px;font-weight:600;letter-spacing:normal;line-height:1.35;text-transform:none;cursor:pointer}
+.field>label.check input{flex:none;width:16px;height:16px;min-height:16px;margin:1px 0 0;accent-color:var(--blue)}
+.split{gap:12px}
+.split>.field{min-width:0}
+.split select,.split input{width:100%;text-overflow:ellipsis}
+.page-nav{right:18px;bottom:22px}
+.page-nav button{width:auto;min-width:106px;height:40px;border-radius:12px;font-size:12px;white-space:nowrap}
+.job-card{padding:18px 20px}
+.jobtop{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.jobtop>div:first-child{min-width:0}
+.jobtop h3{font-size:18px;line-height:1.25}
+.jobtop p{overflow-wrap:anywhere}
+.jobtop-actions{display:flex;gap:8px;flex:none}
+.jobtop-actions a,.jobtop-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bluebg);color:var(--blue);font-weight:800;text-decoration:none}
+.job-origin{margin:9px 0 10px;padding:10px 12px;border-left:3px solid var(--blue);border-radius:7px;background:var(--soft);color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.job-meta{margin:10px 0 14px}
+.job-meta .chip.positive{background:var(--greenbg);color:var(--green)}
+.job-meta .chip.neutral{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+.strategy-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+.strategy-tile{min-width:0;min-height:90px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.strategy-tile small{display:block;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.strategy-tile strong{display:block;margin-top:5px;font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.job-card details,.job-evidence,.job-map{margin:10px 0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.job-card details summary{cursor:pointer;color:var(--blue);font-weight:800}
+.job-card details p{margin:9px 0 0;white-space:pre-line;overflow-wrap:anywhere}
+.job-evidence strong{display:block;margin-bottom:5px}
+.job-evidence p{margin:0;font-size:12px}
+.job-map a{color:var(--blue);font-weight:800;text-decoration:none}
+.job-map a{display:inline-flex;margin:10px 12px 0 0}
+.job-actions{display:grid;grid-template-columns:minmax(130px,1fr) minmax(0,2fr) auto;align-items:end;gap:10px;margin-top:14px}
+.job-actions .action-field{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:11px;font-weight:800}
+.job-actions select,.job-actions textarea{width:100%;max-width:none;margin:0}
+.job-actions textarea{min-height:55px;resize:vertical}
+.job-actions button{min-height:42px}
+.job-apply-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.job-apply-actions button{flex:1;min-width:150px;background:var(--bluebg);color:var(--blue)}
+.job-apply-actions button.primary{background:#1c4ba5;color:white}
+.job-timing{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--muted);font-size:12px}
+.job-timing details{padding:6px 0 0;border:0;background:transparent}
+.job-timing ol{margin:7px 0 0;padding-left:22px}
+.job-foot{margin-top:12px;padding-top:9px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.board-card .job-actions{display:flex;flex-wrap:wrap}
+.board-card .job-actions>*{flex:1;min-width:100px}
+@media(max-width:850px){.strategy-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.job-actions{grid-template-columns:1fr 1fr}.job-actions>button{grid-column:1/-1}}
+@media(max-width:650px){.filter{max-height:none;overflow:visible}.jobtop{flex-wrap:wrap}.jobtop-actions{width:100%}.jobtop-actions>*{flex:1}.job-card{padding:14px}.job-actions{grid-template-columns:1fr}.job-actions>button{grid-column:auto}.page-nav{right:10px;bottom:calc(83px + env(safe-area-inset-bottom))}.page-nav button{width:44px;min-width:44px;height:44px;border-radius:50%;font-size:0;padding:0}.page-nav #goTop::before{content:'↑';font-size:20px}.page-nav #goEnd::before{content:'↓';font-size:20px}}
+
+/* The Teaching studio mirrors the IT studio, but all controls stay Teaching-scoped. */
+#applicationDialog{width:min(820px,calc(100% - 24px));height:min(95dvh,980px);max-height:calc(100dvh - 24px);padding:0;overflow:hidden;border-radius:18px;box-shadow:0 30px 90px #07172f55}
+#applicationDialog .studio-shell{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%;min-width:0}
+#applicationDialog .studio-shell *{min-width:0;max-width:100%}
+#applicationDialog .studio-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+#applicationDialog .studio-head h2{margin:2px 0 3px;font-size:21px;line-height:1.25;letter-spacing:-.025em;overflow-wrap:anywhere}
+#applicationDialog .studio-head p{margin:0;color:var(--muted);font-size:12px}
+#applicationDialog .studio-body{overflow:auto;overflow-x:hidden;padding:18px 20px}
+#applicationDialog .studio-body [hidden]{display:none!important}
+#applicationDialog .studio-status{margin:0 0 14px;padding:10px 12px;border-radius:10px;background:var(--bluebg);color:var(--blue);font-size:12px;font-weight:700}
+#applicationDialog section{margin:12px 0}
+#applicationDialog label{display:block;margin:10px 0 5px;font-size:12px;font-weight:800}
+#applicationDialog input,#applicationDialog select,#applicationDialog textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--input);color:var(--ink)}
+#applicationDialog #applicationDescription{min-height:180px}
+#applicationDialog #teachingDocumentEditor{min-height:300px;font:12px/1.58 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+#applicationDialog #teachingMessage{min-height:155px}
+#applicationDialog .package-controls,#applicationDialog .fast-apply,#applicationDialog .website-apply,#applicationDialog .package-downloads{padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+#applicationDialog .package-regenerate{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+#applicationDialog .document-choices,#applicationDialog .letter-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+#applicationDialog .document-choices{grid-template-columns:repeat(3,minmax(0,1fr))}
+#applicationDialog .package-regenerate button,#applicationDialog .document-choices button,#applicationDialog .letter-choices button{width:100%}
+#applicationDialog button.active,#applicationDialog button.primary{border-color:#2457b9;background:#2457b9;color:#fff}
+#applicationDialog .package-meta{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;color:var(--muted);font-size:12px}
+#applicationDialog .studio-editor-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+#applicationDialog .package-history{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+#applicationDialog .package-history summary{cursor:pointer;color:var(--blue);font-weight:800}
+#applicationDialog #teachingActivity{margin-top:14px}
+#applicationDialog #teachingActivityBody p{margin:8px 0;font-size:12px;overflow-wrap:anywhere}
+#applicationDialog #confirmTeachingManualSubmit{margin-top:12px}
+#applicationDialog .history-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:12px}
+#applicationDialog #applicationPackage{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#applicationDialog #applicationPackage h3{grid-column:1/-1;margin:0;font-size:14px}
+#applicationDialog .fast-apply h3,#applicationDialog .website-apply h3{margin:0 0 8px;font-size:15px}
+#applicationDialog .fast-apply-attachments{padding-left:20px;overflow-wrap:anywhere}
+#applicationDialog .studio-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:16px 0 0;padding:14px 0 max(2px,env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+#applicationDialog .studio-actions a{display:flex;align-items:center;justify-content:center;min-height:42px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;color:var(--blue);font-weight:800;text-decoration:none}
+#applicationDialog button:disabled{opacity:.48;cursor:not-allowed}
+@media(max-width:650px){#applicationDialog{width:calc(100% - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}#applicationDialog .studio-head{display:block;min-height:104px;padding:17px 85px 14px 16px}#applicationDialog .studio-head>button{position:absolute;right:16px;top:17px}#applicationDialog .studio-head h2{font-size:clamp(16px,4.5vw,19px)}#applicationDialog .studio-body{padding:14px}#applicationDialog .package-regenerate,#applicationDialog .document-choices,#applicationDialog .studio-actions,#applicationDialog #applicationPackage{grid-template-columns:1fr}#applicationDialog #applicationPackage h3{grid-column:auto}#applicationDialog .studio-editor-actions>*{flex:1 1 100%}}
