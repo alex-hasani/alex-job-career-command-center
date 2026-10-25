@@ -3,9 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { openJobDatabase } from './job-database.mjs';
 import { buildSourceSearchUrls } from './source-search-urls.mjs';
 import { matchesBooleanText, matchesLocation } from './filter-logic.js';
+import { relevantTeachingPosition } from './teaching-role-scope.mjs';
+import { teachingSearchTerms } from './teaching-search-terms.mjs';
 import { teachingOverview, teachingPaths } from './teaching-space.mjs';
 
-const teachingRole = /\b(?:english|esl|efl|elt|teacher|teaching|tutor|trainer|instructor|educator|englisch|sprachtrainer|dozent|lehrkraft|instructional|education|learning operations)\b/i;
+const teachingRole = /\b(?:english|esl|efl|tefl|tesol|elt|teacher|teaching|tutor|trainer|instructor|educator|englisch\w*|sprachtrainer|dozent|lehrkraft|instructional|education|learning operations)\b/i;
 const blockedRole = /\b(?:it administrator|software engineer|sales manager|refrigeration|purchasing)\b/i;
 const statuses = new Set(['Not recorded','Stashed','Preparing','Applied','Interviewing','Offer','Rejected','Withdrawn','Case Closed','Silent']);
 
@@ -47,7 +49,7 @@ export function verifiedTeachingPosting(html, pageUrl, sourceName, now=new Date(
       if (!teachingRole.test(title) || blockedRole.test(title)) continue;
       if (entry.validThrough && Date.parse(entry.validThrough) < now.getTime()) continue;
       const description=plain(entry.description).slice(0,12000);
-      if (/\b(?:C1|C2)\b.{0,45}\b(?:German|Deutsch)\b|\b(?:German|Deutsch)\b.{0,45}\b(?:C1|C2)\b|\bBAMF\b.{0,45}\b(?:required|erforderlich)\b/i.test(description)) continue;
+      if (/\b(?:C1|C2)\b.{0,45}\b(?:German|Deutsch)\b|\b(?:German|Deutsch)\b.{0,45}\b(?:C1|C2)\b|\bBAMF\b.{0,45}\b(?:required|erforderlich)\b/i.test(description) || !relevantTeachingPosition(title,description)) continue;
       const country=String(address?.addressCountry?.name || address?.addressCountry || '');
       if (country && !/Germany|Deutschland|^DE$/i.test(country)) continue;
       const salaryValue=entry.baseSalary?.value;
@@ -109,7 +111,7 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
     if (refreshPromise) return refreshPromise;
     refreshPromise=(async()=>{
       const configured=await teachingOverview(workspace);
-      const terms=query.trim() ? [query.trim()] : configured.keywords.filter(term=>teachingRole.test(term)).slice(0,3);
+      const terms=teachingSearchTerms(query);
       const selected=configured.sources;
       const checked=[],verified=[];
       if(refreshState){refreshState.totalSources=selected.length;refreshState.phase='Checking Teaching sources';refreshState.progress=2;}
@@ -120,23 +122,27 @@ export function createTeachingDashboard({workspace,fetchImpl=fetch}) {
           const source=selected[next++],started=Date.now();
           const template=/\bIndeed\b/i.test(source.name)?'https://de.indeed.com/jobs?q={keywords}&l={location}&fromage=7':/\bStepStone\b/i.test(source.name)?'https://www.stepstone.de/jobs/{keywordSlug}/in-{locationSlug}?radius=50':'';
           const providerLocation=location==='Stuttgart area'?'Stuttgart':location || 'Germany';
-          const urls=buildSourceSearchUrls({...source,searchUrlTemplate:template},terms,providerLocation).slice(0,1);
-          const entryUrl=publicUrl(urls[0] || source.url);
-          if(!entryUrl){checked.push({source:source.name,status:'unavailable',count:0,message:'Unsafe source URL'});updateProgress();continue;}
+          const urls=buildSourceSearchUrls({...source,searchUrlTemplate:template,searchLaneLimit:5},terms,providerLocation);
           try {
-            const html=await fetchHtml(entryUrl.href,fetchImpl);
-            if(!html){checked.push({source:source.name,status:'unavailable',count:0,message:'Source did not return an open HTML page',latencyMs:Date.now()-started});updateProgress();continue;}
-            const candidates=[entryUrl.href,...postingLinks(html,entryUrl.href)];
             const found=[];
-            for(const url of candidates) {
-              if (verified.length>=12) break;
-              const page=url===entryUrl.href ? html : await fetchHtml(url,fetchImpl).catch(()=>null);
-              const job=page && verifiedTeachingPosting(page,url,source.name);
-              if(job && matchesBooleanText(job,query) &&
-                (location==='Germany' || matchesLocation(job,location,['Stuttgart area','Stuttgart','Germany',...configured.sources.map(item=>item.location).filter(Boolean)],includeRemoteAnywhere)) &&
-                !verified.some(item=>item.url===job.url)){verified.push(job);found.push(job);}
+            let searched=0;
+            for(const searchUrl of (urls.length?urls:[source.url])) {
+              const entryUrl=publicUrl(searchUrl);
+              if(!entryUrl) continue;
+              const html=await fetchHtml(entryUrl.href,fetchImpl).catch(()=>null);
+              if(!html) continue;
+              searched++;
+              const candidates=[entryUrl.href,...postingLinks(html,entryUrl.href)];
+              for(const url of candidates) {
+                if (verified.length>=12) break;
+                const page=url===entryUrl.href ? html : await fetchHtml(url,fetchImpl).catch(()=>null);
+                const job=page && verifiedTeachingPosting(page,url,source.name);
+                if(job && matchesBooleanText(job,query) &&
+                  (location==='Germany' || matchesLocation(job,location,['Stuttgart area','Stuttgart','Germany',...configured.sources.map(item=>item.location).filter(Boolean)],includeRemoteAnywhere)) &&
+                  !verified.some(item=>item.url===job.url)){verified.push(job);found.push(job);}
+              }
             }
-            checked.push({source:source.name,status:found.length?'ok':'not_verified',count:found.length,jobs:found,latencyMs:Date.now()-started,message:found.length?'Exact open posting verified':'No exact open Teaching posting verified'});
+            checked.push({source:source.name,status:!searched?'unavailable':found.length?'ok':'not_verified',count:found.length,jobs:found,latencyMs:Date.now()-started,message:found.length?'Exact open posting verified':'No exact open English-teaching posting verified'});
           } catch(error) {checked.push({source:source.name,status:'unavailable',count:0,message:error.message,latencyMs:Date.now()-started});}
           updateProgress();
         }

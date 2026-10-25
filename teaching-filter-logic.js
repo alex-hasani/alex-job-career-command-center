@@ -1,4 +1,5 @@
 import { matchesBooleanText, matchesLocation, matchesLanguage, matchesWorkType, matchesSource, matchesExperience } from './filter-logic.js';
+import { relevantTeachingPosition } from './teaching-role-scope.mjs';
 
 export const teachingFilterIds = [
   'query','location','company','sourceSelect','language','stream','applicationStatus',
@@ -16,6 +17,7 @@ export function filterTeachingJobs(jobs, criteria, cityOptions=[], now=Date.now(
   const freshness=String(c.freshness || '');
   const salary=Number(c.salary || 0), match=Number(c.match || 0), opportunity=Number(c.opportunity || 0);
   const rows=(jobs || []).filter(job=>{
+    if (!relevantTeachingPosition(job.title,job.description || job.jdSnapshot)) return false;
     const posted=job.posted || job.postedAt || '';
     const age=posted && Number.isFinite(Date.parse(posted)) ? (now-Date.parse(posted))/86400000 : null;
     return matchesBooleanText(job,c.query) &&

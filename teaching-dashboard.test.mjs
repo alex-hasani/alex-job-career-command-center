@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTeachingDashboard, verifiedTeachingPosting } from './teaching-dashboard.mjs';
 import { filterTeachingJobs, teachingFilterIds } from './teaching-filter-logic.js';
+import { relevantTeachingPosition } from './teaching-role-scope.mjs';
+import { teachingSearchTerms } from './teaching-search-terms.mjs';
 import { websiteApplyInternals as teachingApplyInternals } from './teaching-tools/website-apply-agent.mjs';
 
 const page='https://school.example/jobs/english-teacher';
@@ -25,8 +27,22 @@ test('Teaching import accepts only exact, open, suitable posting pages',()=>{
   assert.equal(verifiedTeachingPosting(html({...posting,validThrough:'2020-01-01'}),page,'Example School'),null);
   assert.equal(verifiedTeachingPosting(html({...posting,description:'German C1 required.'}),page,'Example School'),null);
   assert.equal(verifiedTeachingPosting(html({...posting,title:'IT Administrator'}),page,'Example School'),null);
+  assert.equal(verifiedTeachingPosting(html({...posting,title:'German Teacher',description:'Teach German in an English-speaking school.'}),page,'Example School'),null);
   assert.equal(verifiedTeachingPosting('Sign in to continue '+html(posting),page,'Example School'),null);
   assert.equal(verifiedTeachingPosting(html({...posting,jobLocation:{address:{addressLocality:'London',addressCountry:'UK'}}}),page,'Example School'),null);
+});
+
+test('Teaching keeps only English-language instruction, including German titles for English',()=>{
+  assert.equal(relevantTeachingPosition('Englischlehrer','Englischunterricht für Kinder.'),true);
+  assert.equal(relevantTeachingPosition('German Teacher','English-speaking team.'),false);
+  assert.equal(relevantTeachingPosition('Lehrkraft Deutsch und Englisch','Unterricht in Deutsch und Englisch.'),false);
+  assert.equal(relevantTeachingPosition('English-speaking Kindergarten Teacher','English-speaking school.'),false);
+  assert.deepEqual(filterTeachingJobs([
+    {id:'german',title:'Deutsch-Trainer',description:'English-speaking team.'},
+    {id:'english',title:'Lehrkraft Englisch',description:'Englischunterricht.'}
+  ],{}).map(job=>job.id),['english']);
+  assert.ok(teachingSearchTerms('Englischlehrer').includes('ESL teacher'));
+  assert.ok(teachingSearchTerms().includes('TESOL teacher'));
 });
 
 test('Teaching refresh, saved searches and applications stay in Teaching SQLite only',async()=>{
