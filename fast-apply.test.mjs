@@ -82,6 +82,22 @@ test('email copy uses the supplied canonical sender name and selected language',
   assert.match(fastApplyInternals.copy(job,'en','Verified Candidate').subject, /^Application for/);
 });
 
+test('Fast Apply preserves the exact posted position title and rejects job-card metadata', async () => {
+  const title='IT-Systems Engineer / Fachinformatiker (m/w/d)';
+  const job={title,company:'Example Employer'};
+  const message=fastApplyInternals.copy(job,'de','Verified Candidate');
+  assert.equal(message.subject,`Bewerbung als ${title}`);
+  assert.match(message.body,/als IT-Systems Engineer \/ Fachinformatiker \(m\/w\/d\) bei Example Employer\./);
+  const contaminated={...job,title:`${title} Example Employer Stuttgart Bewerben Sie sich frühzeitig Vor 5 Tagen`};
+  assert.throws(()=>fastApplyInternals.copy(contaminated,'de','Verified Candidate'),/position title contains job-board text/i);
+  const service=createFastApplyService({root:'X:/missing-fast-apply-config',workspace:'X:/missing-fast-apply-state',coverLetters:{},senderEmail:'candidate@example.org',senderName:'Verified Candidate'});
+  await assert.rejects(service.send(contaminated,{posting:{text:'Bewerbung an jobs@example.org'}},{to:'jobs@example.org',subject:message.subject,body:message.body}),/position title contains job-board text/i);
+  assert.throws(()=>fastApplyInternals.assertApplicationMessage(job,`Bewerbung als ${title} Vor 5 Tagen`,message.body),/without job-board text/i);
+  assert.throws(()=>fastApplyInternals.assertApplicationMessage(job,'Bewerbung als IT Engineer',message.body),/exact posted position title/i);
+  const server=await readFile(new URL('./server.mjs',import.meta.url),'utf8');
+  assert.match(server,/site\.name === 'LinkedIn Jobs'[\s\S]*?label\.match\(\/<h\[1-4\]/);
+});
+
 test('MIME payload contains both reviewed PDF attachments', () => {
   const raw = fastApplyInternals.mime({
     from:'candidate@example.org',

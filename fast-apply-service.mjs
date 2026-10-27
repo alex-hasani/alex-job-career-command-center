@@ -45,8 +45,21 @@ function language(posting='',requested='') {
   const en=(String(posting).match(/\b(and|or|you|we|your|responsibilities|requirements)\b/gi)||[]).length;
   return de>=en?'de':'en';
 }
+function assertCleanApplicationTitle(job) {
+  const title=clean(job?.title);
+  if (!title || /\b(?:bewerben sie sich(?: fr[üu]hzeitig)?|apply (?:now|early)|vor \d+ (?:tag(?:en)?|stund(?:e|en)|woch(?:e|en))|\d+ (?:days?|hours?|weeks?) ago)\b/i.test(title)) {
+    throw new Error('The saved position title contains job-board text. Correct it to the exact posting title before preparing or sending an application email.');
+  }
+  return title;
+}
+function assertApplicationMessage(job,subject,body) {
+  const title=assertCleanApplicationTitle(job);
+  if (!subject.includes(title) || !body.includes(title) || /\b(?:bewerben sie sich(?: fr[üu]hzeitig)?|vor \d+ (?:tag(?:en)?|stund(?:e|en)|woch(?:e|en))|\d+ (?:days?|hours?|weeks?) ago)\b/i.test(`${subject} ${body}`)) {
+    throw new Error('The email subject and message must use the exact posted position title without job-board text. Reopen Fast Apply and review both fields.');
+  }
+}
 function copy(job,lang,senderName) {
-  const role=clean(job.title), company=clean(job.company);
+  const role=assertCleanApplicationTitle(job), company=clean(job.company);
   return lang==='de'
     ? {subject:`Bewerbung als ${role}`,body:`Guten Tag,\n\nanbei sende ich Ihnen meine Bewerbung als ${role} bei ${company}. Meinen Lebenslauf und mein Anschreiben finden Sie im Anhang.\n\nFür Rückfragen oder ein persönliches Gespräch stehe ich gerne zur Verfügung.\n\nFreundliche Grüße\n${senderName}`}
     : {subject:`Application for ${role}`,body:`Hello,\n\nPlease find attached my application for the ${role} position at ${company}. My CV and cover letter are attached.\n\nI would be pleased to discuss my experience and the role with you.\n\nKind regards,\n${senderName}`};
@@ -129,6 +142,7 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
     const to=validRecipient(input.to), subject=String(input.subject||'').replace(/[\r\n]+/g,' ').trim(), body=String(input.body||'').replace(/\r\n?/g,'\n').trim();
     const verifiedRecipients=postingRecipients(pkg.posting?.text);
     if(!verifiedRecipients.length||!verifiedRecipients.includes(to)){const error=new Error('Recipient mismatch: use an email explicitly listed in the verified job description. Listed addresses: ' + (verifiedRecipients.join(', ') || 'none') + '.');error.code='RECIPIENT_MISMATCH';throw error;}
+    assertApplicationMessage(job,subject,body);
     if(!subject||subject.length>300)throw new Error('Review the email subject before sending');
     if(body.length<40||body.length>5000)throw new Error('Review the email message before sending');
     if(input.confirmed!==true)throw new Error('Final send confirmation is required');
@@ -141,4 +155,4 @@ export function createFastApplyService({root,workspace,coverLetters,senderEmail,
   }
   return{status,authorizationUrl,callback,preview,send,verifyConnection:async()=>{ await accessToken(); const t=await tokens(); return {email:t?.email||''}; }};
 }
-export const fastApplyInternals={candidates,postingRecipients,language,copy,validRecipient,mime,pdfAttachment,gmailFailureMessage};
+export const fastApplyInternals={candidates,postingRecipients,language,copy,assertCleanApplicationTitle,assertApplicationMessage,validRecipient,mime,pdfAttachment,gmailFailureMessage};

@@ -613,9 +613,20 @@ function directSourceJobs(page, site, fallbackLocation) {
       publication_date:item.datePosted, commitment:item.employmentType }, site.name);
   });
   const linked = [...String(page || '').matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
-    .map(([, href, label]) => ({ href:absoluteUrl(site.url, href), title:htmlText(label) }))
-    .filter(item => item.href && /^https?:/i.test(item.href) && relevantResumeHeadline(item.title))
-    .map(item => normalise({ title:item.title, company:site.name, location:locationFromTitle(item.title) || 'Location not stated', url:item.href }, site.name));
+    .map(([, href, label]) => ({
+      href:absoluteUrl(site.url, href),
+      // LinkedIn cards place the employer, city, and age inside the link.
+      // Only the card heading is a position title; skip ambiguous cards.
+      title:site.name === 'LinkedIn Jobs'
+        ? htmlText((label.match(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/i) || [,''])[1])
+        : htmlText(label),
+      company:site.name === 'LinkedIn Jobs'
+        ? htmlText((label.match(/<h4\b[^>]*>([\s\S]*?)<\/h4>/i) || [,''])[1])
+        : site.name
+    }))
+    .filter(item => item.href && /^https?:/i.test(item.href) && relevantResumeHeadline(item.title)
+      && (site.name !== 'LinkedIn Jobs' || item.company))
+    .map(item => normalise({ title:item.title, company:item.company, location:locationFromTitle(item.title) || 'Location not stated', url:item.href }, site.name));
   return uniqueJobs([...structured, ...linked]).filter(job => relevantResumeHeadline(job.title)).slice(0, 25);
 }
 function directSourceFailure(error) {
