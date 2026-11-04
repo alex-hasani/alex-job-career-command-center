@@ -63,7 +63,7 @@ function browserHelperContext(req) {
   const channel=account?`extension:${account.publicId}`:'default';
   if(!account) return {channel,account:null,agent:websiteApply};
   let agent=personalisedWebsiteAgents.get(account.publicId);
-  if(!agent){agent=createWebsiteApplyAgent({workspace,coverLetters:null,profile:account.profile,chromeClient:createChromeHelperClient(channel),onEvent:logActivity});personalisedWebsiteAgents.set(account.publicId,agent);}
+  if(!agent){agent=createWebsiteApplyAgent({workspace,coverLetters:account.usesCanonicalApplicationEvidence?coverLetters:null,profile:account.profile,chromeClient:createChromeHelperClient(channel),onEvent:logActivity});personalisedWebsiteAgents.set(account.publicId,agent);}
   return {channel,account,agent};
 }
 const fastApplySendKey = jobId => `fast_apply_sent:${jobId}`;
@@ -1352,7 +1352,7 @@ async function retryCurrentBrowserPage(input,{agent=websiteApply,account=null}={
       const posting=await agent.posting(job.id);
       await agent.prepareVisibleForm(job.id);
       const preparedJob={...job,title:job.title||posting.title||'Ad-hoc website application',description:posting.text,jdSnapshot:posting.text,jdFetched:true,jdSource:posting.source,jdRetrievedAt:posting.retrievedAt,lastVerifiedAt:posting.retrievedAt};
-      if(account){
+      if(account&&!account.usesCanonicalApplicationEvidence){
         if(!account.resume||account.resume.mime_type!=='application/pdf') throw new Error('This account needs a PDF resume before the personalised helper can upload files');
         await agent.attachFiles(job.id,preparedJob,{cv:account.resume.stored_path},input.language||'de');
         return;

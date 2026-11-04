@@ -293,11 +293,11 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
       } catch(error) { clearInterval(session.timer); set(session,'failed',`Browser agent paused: ${error.message}`); } finally { session.running=false; }
     });
   }
-  async function activateFiles(jobId,job,files,language='de',applicationVersion='user-source') {
+  async function activateFiles(jobId,job,files,language='de',applicationVersion='user-source',reviewedNotes=null) {
     return busy(async()=>{ const session=sessions.get(jobId); if(!session||!await pageExists(session.pageId)) throw new Error('The Google Chrome application tab is no longer open');
     const lang=['de','en'].includes(language)?language:'de';
     const form=profile.applicationForm||{}, applicantName=`${form.firstName||'Candidate'} ${form.lastName||''}`.trim(), startDate=firstDayOfNextMonth();
-    const notes=applicationNote(job,lang,applicantName,form.startAvailability?.[lang]||'');
+    const notes=reviewedNotes===null?applicationNote(job,lang,applicantName,form.startAvailability?.[lang]||''):reviewedNotes;
     session.files=Object.fromEntries(Object.entries(files||{}).filter(([,path])=>Boolean(path)));
     if(!session.files.cv) throw new Error('A PDF resume is required for this browser helper');
     session.fileEvidence=await preparedFileEvidence(session.files);
@@ -308,8 +308,10 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
   }
   async function attach(jobId,job,applicationPackage,language='de') {
     const lang=['de','en'].includes(language)?language:'de';
+    const notes=applicationPackage?.documents?.remarks?.[lang]?.body;
+    if(typeof notes!=='string'||notes.trim().length<20) throw new Error('Regenerate the application package to review the website application notes.');
     const cv=await coverLetters.download(job,lang,'pdf','cv',applicationPackage.currentVersion), letter=await coverLetters.download(job,lang,'pdf','coverLetter',applicationPackage.currentVersion);
-    return activateFiles(jobId,job,{cv:cv.path,letter:letter.path},lang,applicationPackage.currentVersion);
+    return activateFiles(jobId,job,{cv:cv.path,letter:letter.path},lang,applicationPackage.currentVersion,notes);
   }
   function createSession(job,pageId,message) {
     const session={id:randomUUID(),jobId:job.id,pageId,originUrl:job.url,status:'opening',message,startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),steps:0,navigationCount:0,visitedUrls:new Set([job.url]),running:false,files:null,fileEvidence:null,packageIdentity:null,values:{},uploadedFileKinds:new Set(),uploadedFilePaths:new Set(),timer:null};

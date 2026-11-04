@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { teachingDocument, teachingOverview } from './teaching-space.mjs';
 import { createTeachingDashboard } from './teaching-dashboard.mjs';
 import { createTeachingApplicationService } from './teaching-application-service.mjs';
+import { createApplicationWritingReviewer } from './application-writing-review.mjs';
 import { createTeachingFastApplyManager } from './teaching-fast-apply-manager.mjs';
 import { createWebsiteApplyAgent as createTeachingWebsiteApplyAgent } from './teaching-tools/website-apply-agent.mjs';
 import { createChromeHelperClient as createTeachingChromeHelperClient } from './teaching-tools/chrome-helper-client.mjs';
@@ -239,6 +240,18 @@ export function refineResumeEvidence(resumeText, jobDescription='') {
   };
 }
 
+export async function reviewProfileResumeDraft(resumeText,jobDescription='',profile={},reviewer=createApplicationWritingReviewer()) {
+  const result=refineResumeEvidence(resumeText,jobDescription);
+  const language=/berufserfahrung|kenntnisse|lebenslauf|ausbildung/i.test(resumeText)?'de':'en';
+  const reviewed=await reviewer({
+    job:{id:'profile-resume-draft',title:'Resume evidence draft',company:'Not specified'},
+    posting:{text:jobDescription||'General base CV: preserve the original language and factual experience. No specific vacancy has been supplied; do not invent a target role or employer.'},
+    documents:{cv:{[language]:{body:result.atsText}}},
+    evidence:{sourceResume:resumeText,profile},rewriteTypes:['cv']
+  });
+  return {...result,atsText:reviewed.documents.cv[language].body,writingReview:reviewed.review};
+}
+
 export function openUserSpaceDatabase(path) {
   mkdirSync(dirname(path), { recursive:true });
   const db = new DatabaseSync(path);
@@ -363,7 +376,7 @@ export async function readMobileDownloadRegistry(workspace, registryPath=join(wo
   return downloads;
 }
 
-export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json') }) {
+export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json'), writingReviewer=createApplicationWritingReviewer() }) {
   const db = openUserSpaceDatabase(databasePath);
   const teachingDashboard = createTeachingDashboard({ workspace });
   const teachingApplications = createTeachingApplicationService({ workspace });
@@ -700,7 +713,7 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     if(!publicId&&!token) return null;
     const row=db.prepare(`SELECT e.*,u.username,u.display_name,u.disabled_at FROM browser_extensions e JOIN users u ON u.id=e.user_id WHERE e.public_id=?`).get(publicId);
     if(!row||row.disabled_at||!token||!timingSafeEqual(Buffer.from(row.token_hash),Buffer.from(sha256(token)))) throw httpError(401,'This personalised Chrome helper is not authorised. Export it again from your user space.','EXTENSION_AUTH_REQUIRED');
-    return {publicId,userId:row.user_id,user:{username:row.username,displayName:row.display_name},profile:applicationProfile(profileFor(row.user_id)),resume:latestResume(row.user_id)};
+    return {publicId,userId:row.user_id,usesCanonicalApplicationEvidence:row.user_id===protectedAdminId(),user:{username:row.username,displayName:row.display_name},profile:applicationProfile(profileFor(row.user_id)),resume:latestResume(row.user_id)};
   }
 
   async function refine(req, res) {
@@ -709,7 +722,9 @@ export function createUserSpaceRouter({ root, workspace, databasePath=join(works
     const source = latestResume(session.row.user_id);
     if (!source) throw httpError(409, 'Upload the initial resume first.', 'RESUME_REQUIRED');
     const jobDescription = String(input.jobDescription || '').trim().slice(0, 200_000);
-    const result = refineResumeEvidence(source.extracted_text, jobDescription);
+    const result = session.row.user_id===protectedAdminId()
+      ? await reviewProfileResumeDraft(source.extracted_text,jobDescription,profileFor(session.row.user_id),writingReviewer)
+      : refineResumeEvidence(source.extracted_text, jobDescription);
     const draft = { id:randomUUID(), user_id:session.row.user_id, source_document_id:source.id, mode:result.mode, job_description_hash:jobDescription ? sha256(jobDescription) : null, result_json:JSON.stringify(result), created_at:nowIso() };
     db.prepare('INSERT INTO resume_drafts(id,user_id,source_document_id,mode,job_description_hash,result_json,created_at) VALUES(?,?,?,?,?,?,?)')
       .run(draft.id,draft.user_id,draft.source_document_id,draft.mode,draft.job_description_hash,draft.result_json,draft.created_at);

@@ -13,3 +13,9 @@ Codex runs with a read-only sandbox in a fresh temporary directory, without load
 On Windows, the executable is discovered under the installed Codex app or on PATH. An administrator can set `ALEX_JOB_CODEX_BINARY` to an absolute executable path if the service account cannot discover it. Never put credentials in this variable. Default timeout is four minutes per writer/reviewer invocation; normal generation takes at least two invocations. No silent template fallback is used.
 
 Validation: `node --test application-writing-review.test.mjs application-package.test.mjs teaching-application-service.test.mjs`. Unit tests inject a fictional reviewer; a real CLI connection must also be tested separately before deployment is claimed.
+
+## Entry-point coverage
+
+For the protected account, dashboard preparation/regeneration, ready-to-send preparation, Fast Apply, IT Chrome helper retries, Teaching Chrome helper retries and Teaching website application all consume the same reviewed packages. Personalized IT helpers must not substitute the original uploaded resume for the tailored package. Portal notes come from the reviewed package's remarks in the selected language, not a second template. Account form facts remain profile values; unknown site-specific questions are not invented.
+
+The protected account's Profile-page ATS/base and job-focused drafts also use the shared writer/reviewer, grounded only in that account's uploaded resume and saved profile. Without an advertisement they remain general base drafts and do not invent a vacancy. Other accounts never receive the protected account's canonical career evidence. No extension reinstall is necessary for these server-side rules. Validate routing with `node --test tailoring-paths.test.mjs`.
