@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import JSZip from 'jszip';
 import { Document, Packer, Paragraph } from 'docx';
 import { createTeachingApplicationService } from './teaching-application-service.mjs';
+import { createApplicationWritingReviewer } from './application-writing-review.mjs';
 
 test('Teaching application packages use Teaching masters and Teaching-only versioned storage', async () => {
   const workspace=await mkdtemp(join(tmpdir(),'alex-teaching-package-'));
@@ -21,7 +22,8 @@ test('Teaching application packages use Teaching masters and Teaching-only versi
       ]}]});
       await writeFile(join(docs,`Demo_Candidate_Teaching_CV_${language}_2026-10-23.docx`),await Packer.toBuffer(fixture));
     }
-    const service=createTeachingApplicationService({workspace});
+    const agent=async({prompt,outputSchema})=>outputSchema.properties.documents?{documents:JSON.parse(prompt.split('\nINPUT\n')[1]).currentDocuments}:{approved:true,findings:[]};
+    const service=createTeachingApplicationService({workspace,writingReviewer:createApplicationWritingReviewer({agent})});
     const job={id:'teaching:test',title:'English Teacher',company:'Example School',location:'Stuttgart',url:'https://example.org/jobs/teacher',description:'English teacher for young learners. '.repeat(25)};
     await assert.rejects(service.prepare(job,'too short'),/complete job description/);
     const first=await service.prepare(job);

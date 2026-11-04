@@ -14,6 +14,7 @@ import {
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import { canonicalResumeProfile } from './canonical-resume-profile.mjs';
+import { createApplicationWritingReviewer, assertWritingReview, hasCurrentWritingReview } from './application-writing-review.mjs';
 
 const MAX_JD_LENGTH = 45000;
 const MAX_LETTER_LENGTH = 12000;
@@ -895,7 +896,7 @@ async function writeTailoringNotes(folder, data) {
   await writeFile(join(folder, 'tailoring_notes.md'), notes, 'utf8');
 }
 
-export function createCoverLetterService({ workspace, approvedEvidencePath }) {
+export function createCoverLetterService({ workspace, approvedEvidencePath, writingReviewer=createApplicationWritingReviewer() }) {
   const applicationsRoot = applicationDocumentsRoot(workspace);
   const approvedPath = approvedEvidencePath || join(workspace, 'Evidence_Bank', 'approved_evidence.json');
   const pdfBuilds = new Map();
@@ -913,6 +914,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
   function current(data) { return data.versions?.find(version => version.versionNumber === data.currentVersion) || data.versions?.at(-1); }
   function versionFolder(job, number) { return join(applicationsRoot, packageKey(job), `v${number}`); }
   async function writeVersionFiles(data, version) {
+    assertWritingReview(data.job,version.documents,version.audit?.writingReview);
     const folder = versionFolder(data.job, version.versionNumber);
     await mkdir(folder, { recursive:true });
     for (const language of ['de','en']) {
@@ -973,6 +975,9 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     const versionNumber = Math.max(0,...priorVersions.map(version => Number(version.versionNumber) || 0)) + 1;
     const scope = ['cv','coverLetter','full'].includes(options.scope) ? options.scope : 'full';
     const next = createVersion(job, posting, versionNumber, scope);
+    const reviewed=await writingReviewer({job,posting,documents:next.documents,evidence:{profile:canonicalResumeProfile,approvedEvidence:await assertEvidenceReady()}});
+    next.documents=reviewed.documents;
+    next.audit.writingReview=reviewed.review;
     data = {
       version:3,
       packageKey:key,
@@ -1020,6 +1025,9 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     document.manualEdited = true;
     document.editedAt = new Date().toISOString();
     active.audit.manuallyEditedDocuments = [...new Set([...(active.audit.manuallyEditedDocuments || []),`${selectedType}.${selectedLanguage}`])];
+    const reviewed=await writingReviewer({job:data.job,posting:data.posting,documents:active.documents,evidence:{profile:canonicalResumeProfile,approvedEvidence:await assertEvidenceReady()},tailor:false});
+    active.audit.writingReview=reviewed.review;
+    assertWritingReview(data.job,active.documents,active.audit.writingReview);
     if (selectedType === 'cv') await createResumeDocx(document,document.document.path);
     else if (selectedType === 'coverLetter') await createDocx({ letter:document },document.document.path);
     data.updatedAt = new Date().toISOString();
@@ -1050,6 +1058,9 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     data.versions.push(restored);
     data.currentVersion = nextNumber;
     data.updatedAt = new Date().toISOString();
+    const reviewed=await writingReviewer({job:data.job,posting:data.posting,documents:restored.documents,evidence:{profile:canonicalResumeProfile,approvedEvidence:await assertEvidenceReady()},tailor:false});
+    restored.audit ||= {};
+    restored.audit.writingReview=reviewed.review;
     await writeVersionFiles(data,restored);
     await writeFile(path,JSON.stringify(data,null,2),'utf8');
     return publicPackage(data);
@@ -1063,6 +1074,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
     const selectedLanguage = String(language).toLowerCase();
     const selectedType = documentType === 'cv' ? 'cv' : 'coverLetter';
     const version = versionNumber ? data.versions.find(item => item.versionNumber === Number(versionNumber)) : current(data);
+    assertWritingReview(data.job,version?.documents || {},version?.audit?.writingReview);
     const document = version?.documents?.[selectedType]?.[selectedLanguage];
     if (!document) throw new Error('The selected document is unavailable');
     if (String(format).toLowerCase() === 'pdf') {
@@ -1116,7 +1128,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath }) {
       customizationSummary:active.customizationSummary,
       evidenceTrace:active.evidenceTrace,
       history,
-      quality:{ jdComplete,applicationReady:Boolean(jdComplete && documents.cv.de && documents.cv.en && documents.coverLetter.de && documents.coverLetter.en),warning:jdComplete ? '' : 'Regenerate from the complete job description.' },
+      quality:{ jdComplete,writingReview:active.audit?.writingReview || null,applicationReady:Boolean(jdComplete && hasCurrentWritingReview(data.job,active.documents,active.audit?.writingReview) && documents.cv.de && documents.cv.en && documents.coverLetter.de && documents.coverLetter.en),warning:!jdComplete ? 'Regenerate from the complete job description.' : hasCurrentWritingReview(data.job,active.documents,active.audit?.writingReview) ? '' : 'Regenerate for the required independent Codex writing review.' },
       lifecycle:data.lifecycle,
       createdAt:data.createdAt,
       updatedAt:data.updatedAt,

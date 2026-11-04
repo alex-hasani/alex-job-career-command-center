@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import JSZip from 'jszip';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 import { teachingPaths } from './teaching-space.mjs';
+import { createApplicationWritingReviewer, assertWritingReview, hasCurrentWritingReview } from './application-writing-review.mjs';
 
 const LANGUAGES = ['en', 'de'];
 const TYPES = ['cv', 'coverLetter'];
@@ -91,10 +92,11 @@ async function writePdf(path, body, type, master) {
     await page.pdf({path,format:'A4',printBackground:true,preferCSSPageSize:true});
   } finally {await browser?.close();}
 }
-export function createTeachingApplicationService({workspace}) {
+export function createTeachingApplicationService({workspace,writingReviewer=createApplicationWritingReviewer()}) {
   const paths=teachingPaths(workspace);
   const root=join(paths.documents,'Applications');
   const packagePath=job=>join(root,safeKey(job),'application-package.json');
+  const reviewDocuments=text=>Object.fromEntries(TEXT_TYPES.map(type=>[type,Object.fromEntries(LANGUAGES.filter(language=>text[type]?.[language]).map(language=>[language,{body:text[type][language]}]))]));
   async function read(job) {
     try {return JSON.parse(await readFile(packagePath(job),'utf8'));}
     catch(error){if(error.code==='ENOENT') return null;throw error;}
@@ -106,10 +108,16 @@ export function createTeachingApplicationService({workspace}) {
       return [language,{body:active.text[type][language],document:{fileName:active.files[type][language].docx,downloadUrl:`${base}&format=docx`,pdfDownloadUrl:`${base}&format=pdf`}}];
     }))]));
     documents.remarks=Object.fromEntries(LANGUAGES.map(language=>[language,{body:active.text.remarks?.[language]||''}]));
-    return {job:data.job,posting:{text:data.posting.text,source:data.posting.source},currentVersion:data.currentVersion,history:data.versions.map(item=>({version:item.version,createdAt:item.createdAt,changeType:item.changeType||'full'})),documents,quality:{jdComplete:true,applicationReady:true},updatedAt:data.updatedAt};
+    const reviewed=hasCurrentWritingReview(data.job,reviewDocuments(active.text),active.writingReview);
+    return {job:data.job,posting:{text:data.posting.text,source:data.posting.source},currentVersion:data.currentVersion,history:data.versions.map(item=>({version:item.version,createdAt:item.createdAt,changeType:item.changeType||'full'})),documents,quality:{jdComplete:true,applicationReady:reviewed,writingReview:active.writingReview||null,warning:reviewed?'':'Regenerate for the required independent Codex writing review.'},updatedAt:data.updatedAt};
   }
   async function writeVersion(job,data,text,changeType) {
     const version=data.currentVersion+1,folder=join(root,safeKey(job),`v${version}`),files={cv:{},coverLetter:{}},headers={};
+    const evidence={};
+    for(const language of LANGUAGES)evidence[language]=await masterParagraphs(await pickMaster(paths,language));
+    const reviewed=await writingReviewer({job:data.job,posting:data.posting,documents:reviewDocuments(text),evidence,tailor:['full','cv','coverLetter'].includes(changeType),rewriteTypes:changeType==='full'?TEXT_TYPES:[changeType]});
+    text=Object.fromEntries(TEXT_TYPES.map(type=>[type,Object.fromEntries(LANGUAGES.map(language=>[language,reviewed.documents[type]?.[language]?.body||text[type]?.[language]||'']))]));
+    assertWritingReview(data.job,reviewDocuments(text),reviewed.review);
     await mkdir(folder,{recursive:true});
     for(const language of LANGUAGES){
       const master=await masterParagraphs(await pickMaster(paths,language));headers[language]=master.slice(0,3);
@@ -119,7 +127,7 @@ export function createTeachingApplicationService({workspace}) {
         await writeDocx(join(folder,files[type][language].docx),text[type][language],type,master);
       }
     }
-    const updated={...data,currentVersion:version,versions:[...data.versions,{version,createdAt:new Date().toISOString(),changeType,text,files,headers}],updatedAt:new Date().toISOString()};
+    const updated={...data,currentVersion:version,versions:[...data.versions,{version,createdAt:new Date().toISOString(),changeType,text,files,headers,writingReview:reviewed.review}],updatedAt:new Date().toISOString()};
     const target=packagePath(job),temporary=`${target}.${process.pid}.tmp`;
     await writeFile(temporary,JSON.stringify(updated,null,2),'utf8');await rename(temporary,target);
     return publicPackage(updated);
@@ -162,6 +170,7 @@ export function createTeachingApplicationService({workspace}) {
     if(!data) throw new Error('Prepare a Teaching application package first');
     const item=data.versions.find(entry=>entry.version===Number(version||data.currentVersion));
     if(!item) throw new Error('Teaching package version not found');
+    assertWritingReview(data.job,reviewDocuments(item.text),item.writingReview);
     const name=item.files[type][language][format],path=join(root,safeKey(job),`v${item.version}`,name);
     if(format==='pdf') {
       const docxPath=join(root,safeKey(job),`v${item.version}`,item.files[type][language].docx);
