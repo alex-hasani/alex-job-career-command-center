@@ -15,11 +15,11 @@ const overview={jobs:[job],sources:[],documents:[],savedSearches:[],sourceStatus
 test('Teaching Fast Apply and AI website buttons open their own working studio flows', {skip:!existsSync(chrome)}, async()=>{
   let websiteStarts=0;
   let savedLink='';
-  const files=new Map([['/teaching','teaching.html'],['/teaching.js','teaching.js'],['/teaching.css','teaching.css'],['/teaching-parity.css','teaching-parity.css'],['/teaching-filter-logic.js','teaching-filter-logic.js'],['/filter-logic.js','filter-logic.js']]);
+  const files=new Map([['/teaching','teaching.html'],['/teaching.js','teaching.js'],['/teaching.css','teaching.css'],['/teaching-parity.css','teaching-parity.css'],['/teaching-filter-logic.js','teaching-filter-logic.js'],['/teaching-role-scope.mjs','teaching-role-scope.mjs'],['/filter-logic.js','filter-logic.js']]);
   const server=createServer(async(req,res)=>{
     const path=new URL(req.url,'http://localhost').pathname;
     const send=(value,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(value));};
-    if(files.has(path)){const content=await readFile(join(import.meta.dirname,files.get(path)));res.writeHead(200,{'content-type':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'text/html'});res.end(content);return;}
+    if(files.has(path)){const content=await readFile(join(import.meta.dirname,files.get(path)));res.writeHead(200,{'content-type':path.endsWith('.css')?'text/css':/\.m?js$/.test(path)?'text/javascript':'text/html'});res.end(content);return;}
     if(path==='/api/user-space/session')return send({authenticated:true,csrfToken:'test-token'});
     if(path==='/api/user-space/teaching-overview')return send(overview);
     if(path==='/api/user-space/teaching-refresh')return send({id:'test-refresh',status:'completed',result:{...overview,verified:1,checked:1}});
@@ -37,7 +37,13 @@ test('Teaching Fast Apply and AI website buttons open their own working studio f
   const browser=await chromium.launch({headless:true,executablePath:chrome});
   try{
     const page=await browser.newPage({viewport:{width:1280,height:850}});
+    const scriptErrors=[];
+    page.on('pageerror',error=>scriptErrors.push(error.message));
+    page.on('response',response=>{
+      if(/\.m?js$/.test(new URL(response.url()).pathname)&&response.status()>=400) scriptErrors.push(`Module failed: ${response.status()} ${new URL(response.url()).pathname}`);
+    });
     await page.goto(`http://127.0.0.1:${server.address().port}/teaching`);
+    assert.deepEqual(scriptErrors,[],'Teaching modules must load successfully before testing the studio controls');
     await page.getByRole('button',{name:'Fast Apply',exact:true}).first().click();
     await page.getByText('Fast Apply · Gmail preview').waitFor();
     assert.equal(await page.locator('#sendTeachingEmail').isDisabled(),true);
