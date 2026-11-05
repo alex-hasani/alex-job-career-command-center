@@ -376,7 +376,7 @@ export async function readMobileDownloadRegistry(workspace, registryPath=join(wo
   return downloads;
 }
 
-export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json'), writingReviewer=createApplicationWritingReviewer() }) {
+export function createUserSpaceRouter({ root, workspace, databasePath=join(workspace, 'State', 'user-space.sqlite'), storageRoot=join(workspace, 'State', 'user-space-files'), protectedAdminProfile=null, protectedAdminDocumentsPath=join(workspace,'State','user-space-admin-documents.json'), mobileDownloadsPath=join(workspace,'State','mobile-downloads.json'), writingReviewer=createApplicationWritingReviewer({workspace}) }) {
   const db = openUserSpaceDatabase(databasePath);
   const teachingDashboard = createTeachingDashboard({ workspace });
   const teachingApplications = createTeachingApplicationService({ workspace });

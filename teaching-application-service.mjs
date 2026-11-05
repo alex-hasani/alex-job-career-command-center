@@ -92,7 +92,7 @@ async function writePdf(path, body, type, master) {
     await page.pdf({path,format:'A4',printBackground:true,preferCSSPageSize:true});
   } finally {await browser?.close();}
 }
-export function createTeachingApplicationService({workspace,writingReviewer=createApplicationWritingReviewer()}) {
+export function createTeachingApplicationService({workspace,writingReviewer=createApplicationWritingReviewer({workspace})}) {
   const paths=teachingPaths(workspace);
   const root=join(paths.documents,'Applications');
   const packagePath=job=>join(root,safeKey(job),'application-package.json');

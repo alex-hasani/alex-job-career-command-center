@@ -896,7 +896,7 @@ async function writeTailoringNotes(folder, data) {
   await writeFile(join(folder, 'tailoring_notes.md'), notes, 'utf8');
 }
 
-export function createCoverLetterService({ workspace, approvedEvidencePath, writingReviewer=createApplicationWritingReviewer() }) {
+export function createCoverLetterService({ workspace, approvedEvidencePath, writingReviewer=createApplicationWritingReviewer({workspace}) }) {
   const applicationsRoot = applicationDocumentsRoot(workspace);
   const approvedPath = approvedEvidencePath || join(workspace, 'Evidence_Bank', 'approved_evidence.json');
   const pdfBuilds = new Map();
@@ -1026,10 +1026,10 @@ export function createCoverLetterService({ workspace, approvedEvidencePath, writ
     document.editedAt = new Date().toISOString();
     active.audit.manuallyEditedDocuments = [...new Set([...(active.audit.manuallyEditedDocuments || []),`${selectedType}.${selectedLanguage}`])];
     const reviewed=await writingReviewer({job:data.job,posting:data.posting,documents:active.documents,evidence:{profile:canonicalResumeProfile,approvedEvidence:await assertEvidenceReady()},tailor:false});
+    active.documents=reviewed.documents;
     active.audit.writingReview=reviewed.review;
     assertWritingReview(data.job,active.documents,active.audit.writingReview);
-    if (selectedType === 'cv') await createResumeDocx(document,document.document.path);
-    else if (selectedType === 'coverLetter') await createDocx({ letter:document },document.document.path);
+    await writeVersionFiles(data,active);
     data.updatedAt = new Date().toISOString();
     await writeFile(path,JSON.stringify(data,null,2),'utf8');
     return publicPackage(data);
@@ -1059,6 +1059,7 @@ export function createCoverLetterService({ workspace, approvedEvidencePath, writ
     data.currentVersion = nextNumber;
     data.updatedAt = new Date().toISOString();
     const reviewed=await writingReviewer({job:data.job,posting:data.posting,documents:restored.documents,evidence:{profile:canonicalResumeProfile,approvedEvidence:await assertEvidenceReady()},tailor:false});
+    restored.documents=reviewed.documents;
     restored.audit ||= {};
     restored.audit.writingReview=reviewed.review;
     await writeVersionFiles(data,restored);
