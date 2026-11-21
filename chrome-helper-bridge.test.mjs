@@ -44,7 +44,7 @@ test('Chrome helper searches embedded frames and clicks only the chosen applicat
   assert.match(source,/Cannot find context/);
   assert.match(agent,/posting[\s\S]+evaluateFrames/);
   assert.match(agent,/including embedded frames/);
-  assert.match(manifest,/"version": "1\.2\.2"/);
+  assert.match(manifest,/"version": "1\.2\.3"/);
 });
 
 test('Chrome helper exposes a safe current-page retry action', async () => {

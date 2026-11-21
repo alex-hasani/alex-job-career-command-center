@@ -30,16 +30,23 @@ assert.equal(matchesSource({ source:'Freehire', sources:['Remotive'] }, 'Remotiv
 assert.equal(matchesExperience({ experience:'Senior' }, 'Senior'), true);
 assert.equal(matchesExperience({ experience:'Mid level' }, 'Senior'), false);
 
-const response = await fetch('http://127.0.0.1:8787/api/jobs');
-assert.equal(response.ok, true);
-const jobs = (await response.json()).jobs;
+// Test the public portfolio's filters without contacting a running personal
+// dashboard or requiring its database. API and authentication have their own tests.
+const jobs = [
+  ...Array.from({length:24},(_,index)=>({title:`Example Berlin role ${index+1}`,location:'Berlin',
+    rawLanguage:index%2===0?'English accepted':'German / confirm',workType:index%3===0?'Full-time':'Contract',
+    experience:index%3===0?'Senior':'Mid level',salaryMax:index%2===0?70000:50000,
+    posted:index%2===0?'2026-01-01':'',match:index%2===0?85:55,
+    url:index%2===0?'https://example.test/role':'',applicationStatus:index%3===0?'Applied':'Not applied'})),
+  {location:'Stuttgart',remote:false}, {location:'Munich / hybrid',remote:true},
+  {location:'Remote, Germany',remote:true}
+];
 const berlin = jobs.filter(job => matchesLocation(job, 'Berlin', cities));
 const berlinPlusRemote = jobs.filter(job => matchesLocation(job, 'Berlin', cities, true));
-assert.ok(berlin.length > 0, 'Berlin filter should return at least one saved job');
-assert.ok(berlin.length >= 20, `Berlin filter received only ${berlin.length} records; the API may be truncating the SQLite database before client-side filtering`);
+assert.equal(berlin.length,24,'strict Berlin filtering retains all matching fixtures');
 assert.equal(berlin.some(job => /stuttgart/i.test(job.location) && !/berlin/i.test(job.location)), false, 'Berlin results must not contain Stuttgart-tied roles');
 assert.equal(berlin.some(job => /(munich|münchen|hamburg|cologne|köln|düsseldorf|leipzig|dresden|nuremberg|nürnberg|hannover|bremen|essen|dortmund|bonn|wiesbaden|aachen)/i.test(job.location) && !/berlin/i.test(job.location)), false, 'Berlin results must not contain roles tied to another configured city');
-assert.ok(berlinPlusRemote.length >= berlin.length, 'Remote opt-in must not remove strict Berlin matches');
+assert.equal(berlinPlusRemote.length,25,'Remote opt-in adds only the Germany-wide remote fixture');
 const checks = {
   english:jobs.filter(job => matchesLanguage(job, 'English accepted')),
   fullTime:jobs.filter(job => matchesWorkType(job, 'Full-time')),
@@ -52,6 +59,6 @@ const checks = {
   applied:jobs.filter(job => job.applicationStatus === 'Applied')
 };
 for (const [name, rows] of Object.entries(checks)) {
-  assert.ok(rows.length < jobs.length, `${name} must narrow the database`);
+  assert.ok(rows.length > 0 && rows.length < jobs.length, `${name} must select a nonempty proper subset`);
 }
 console.log(JSON.stringify({ ok:true, total:jobs.length, berlin:berlin.length, berlinPlusRemote:berlinPlusRemote.length, counts:Object.fromEntries(Object.entries(checks).map(([name, rows]) => [name, rows.length])) }));
