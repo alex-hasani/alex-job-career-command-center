@@ -1,4 +1,5 @@
 import { filterTeachingJobs, teachingFilterIds, teachingCheckboxIds, teachingStatuses } from './teaching-filter-logic.js';
+import { openRejectionFeedbackDraft } from './rejection-feedback-draft.js';
 
 function sourceAvailability(source){
   if(source.availability)return source.availability;
@@ -126,7 +127,12 @@ function jobCard(job,compact=false){
   const applyActions=element('div','job-apply-actions');
   for(const [label,mode,autoStart] of [['Prepare application','package',false],['Start AI website application','website',true],['Edit link / Retry AI Apply','editLink',false],['Fast Apply','fast',false]]){
     const button=element('button',label==='Fast Apply'?'primary':'',label);button.type='button';button.addEventListener('click',()=>openApplication(job,mode,autoStart));applyActions.append(button);
-  }card.append(applyActions);
+  }
+  if(job.applicationStatus==='Rejected'){
+    const feedback=element('button','','Draft feedback reply');feedback.type='button';
+    feedback.addEventListener('click',()=>openRejectionFeedbackDraft(job));applyActions.append(feedback);
+  }
+  card.append(applyActions);
   const timing=element('div','job-timing');
   timing.append(element('span','',`Applied: ${job.appliedAt?new Date(job.appliedAt).toLocaleString():'Date not recorded'} · Status last changed: ${job.applicationStatusChangedAt?new Date(job.applicationStatusChangedAt).toLocaleString():'Timestamp not recorded'}`));
   if(Array.isArray(job.applicationHistory)&&job.applicationHistory.length){
