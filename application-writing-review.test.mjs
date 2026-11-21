@@ -44,6 +44,34 @@ test('writer cannot change protected history, position name or regeneration scop
     await assert.rejects(reviewer({job,posting,documents,evidence,rewriteTypes:['coverLetter']}),/protected|position|scope/);
   }
 });
+test('a rejected rewrite gets one clean repair before independent review',async()=>{
+  for(const [id,mutate,finding] of [
+    ['cv.en',body=>body.replace('2020-2024','2010-2024'),/protected CV detail/],
+    ['coverLetter.en',body=>body.replace(job.title,'Different Role'),/exact advertised position name/]
+  ]){
+    let writes=0,reviews=0;
+    const reviewer=createApplicationWritingReviewer({agent:async request=>{
+      if(!request.outputSchema.properties.documents){
+        reviews++;
+        assert.deepEqual(input(request.prompt).documents,input(request.prompt).originalDocuments);
+        return {approved:true,findings:[]};
+      }
+      const {documents:draft}=await acceptingAgent(request);
+      if(++writes===1){
+        const item=draft.find(item=>item.id===id);
+        item.body=mutate(item.body);
+      }else{
+        assert.match(request.prompt,finding);
+        assert.deepEqual(draft,input(request.prompt).originalDocuments);
+      }
+      return {documents:draft};
+    }});
+    const result=await reviewer({job,posting,documents,evidence});
+    assert.equal(writes,2);
+    assert.equal(reviews,1);
+    assert.equal(hasCurrentWritingReview(job,result.documents,result.review),true);
+  }
+});
 test('manual edits receive review only and are never silently rewritten',async()=>{
   let calls=0;
   const reviewer=createApplicationWritingReviewer({agent:async request=>{calls++;assert.equal(request.outputSchema.properties.documents,undefined);return {approved:true,findings:[]};}});

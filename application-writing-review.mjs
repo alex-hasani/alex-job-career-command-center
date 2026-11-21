@@ -103,8 +103,17 @@ export function createApplicationWritingReviewer({agent=runLocalCodex,workspace}
     for(let attempt=0;attempt<(tailor?2:1);attempt++){
       if(tailor){
         const draft=await agent({outputSchema:draftSchema,prompt:`${boundary}\nYou are the application writer. Rewrite only editableDocumentIds in the candidate's professional voice while fully tailoring them to this advertisement; return other documents byte-for-byte unchanged. Preserve protected CV lines EXACTLY, all factual claims and the exact advertised position name. Keep CV section structure, language and readable length. Return all document IDs exactly once. Do not include cover-letter subject/date/header in its body unless already present. Repair these prior review findings: ${JSON.stringify(findings)}\nINPUT\n${JSON.stringify({...context,currentDocuments:writingDocuments(next)})}`});
-        next=applyDraft(documents,draft,job);
-        for(const item of writingDocuments(next))if(!context.editableDocumentIds.includes(item.id)&&item.body!==original.find(before=>before.id===item.id).body)fail('Codex changed a document outside the requested regeneration scope.');
+        try {
+          const candidate=applyDraft(documents,draft,job);
+          for(const item of writingDocuments(candidate))if(!context.editableDocumentIds.includes(item.id)&&item.body!==original.find(before=>before.id===item.id).body)fail('Codex changed a document outside the requested regeneration scope.');
+          next=candidate;
+        } catch(error) {
+          if(error.code!=='APPLICATION_REVIEW_REQUIRED'||attempt>0)throw error;
+          // A failed guard is actionable feedback, but the rejected draft must
+          // never reach independent review or become a source of candidate facts.
+          findings=[error.message];
+          continue;
+        }
       }
       const review=await agent({outputSchema:reviewSchema,prompt:`${boundary}\nYou are an independent application reviewer, not the writer. Compare EVERY document against the original career evidence, advertisement and writing policy. Reject unsupported facts, changed titles/dates/qualifications/language levels, exaggerated praise, generic sales language, lost relevant experience, weak tailoring, unnatural or overly polished wording. Ask whether this sounds like the candidate communicating professionally and whether they could explain every sentence in an interview. This is a qualitative review, NOT proof of human authorship or an AI-detector score. Return approved=true only if every document passes, with findings=[]; otherwise give concrete corrections.\nINPUT\n${JSON.stringify({...context,documents:writingDocuments(next)})}`});
       rounds++;
