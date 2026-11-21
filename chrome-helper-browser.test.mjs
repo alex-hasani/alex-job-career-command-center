@@ -17,9 +17,16 @@ for(const directory of ['chrome-helper-extension','teaching-chrome-helper-extens
       const extension=join(folder,'extension');
       await cp(new URL(`./${directory}/`,import.meta.url),extension,{recursive:true});
       const pending=[], inflight=new Map();
-      let context, submitRequests=0;
+      let context, submitRequests=0, statusChecks=0, retryRequests=0;
       const server=createServer(async (req,res)=>{
         const reply=(status,body,type='text/html; charset=utf-8')=>res.writeHead(status,{'content-type':type}).end(body);
+        if(req.url==='/api/browser-helper/status'&&req.method==='GET'){
+          return reply(200,JSON.stringify({connected:++statusChecks>1}),'application/json');
+        }
+        if(req.url==='/api/browser-helper/retry-current'&&req.method==='POST'){
+          retryRequests++;
+          return reply(statusChecks>1?202:503,JSON.stringify({session:{status:'scanning_advert'}}),'application/json');
+        }
         if(req.url==='/api/browser-helper/next'&&req.method==='GET'){
           const teaching=req.headers['x-alex-job-track']==='teaching';
           if(teaching!==directory.startsWith('teaching'))return reply(403,'Wrong track');
@@ -56,6 +63,9 @@ for(const directory of ['chrome-helper-extension','teaching-chrome-helper-extens
       const offscreen=await readFile(offscreenPath,'utf8');
       assert.match(offscreen,/const base='http:\/\/127\.0\.0\.1:8787'/);
       await writeFile(offscreenPath,offscreen.replace("const base='http://127.0.0.1:8787'",`const base=${JSON.stringify(origin)}`));
+      const workerPath=join(extension,'service-worker.js');
+      const workerSource=await readFile(workerPath,'utf8');
+      await writeFile(workerPath,workerSource.replaceAll('http://127.0.0.1:8787',origin));
       context=await chromium.launchPersistentContext(join(folder,'browser'),{executablePath,channel:'chromium',headless:true,
         args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
       const run=(type,payload={})=>new Promise((resolve,reject)=>{
@@ -67,8 +77,18 @@ for(const directory of ['chrome-helper-extension','teaching-chrome-helper-extens
         });
         pending.push({id,type,payload});
       });
-      assert.deepEqual(await run('ping'),{ok:true,version:'1.2.3'});
+      assert.deepEqual(await run('ping'),{ok:true,version:directory.startsWith('teaching')?'1.2.3':'1.2.6'});
       const {id:tabId}=await run('newPage',{url:origin+'/advert'});
+      if(!directory.startsWith('teaching')){
+        const worker=context.serviceWorkers()[0];
+        const popup=await context.newPage();
+        await popup.goto(new URL('/popup.html',worker.url()).href);
+        const result=await popup.evaluate(payload=>chrome.runtime.sendMessage({type:'alex-job-retry-current',payload}),{tabId,url:origin+'/advert'});
+        assert.equal(result.ok,true,result.error);
+        assert.equal(statusChecks,2);
+        assert.equal(retryRequests,1);
+        await popup.close();
+      }
       const opened=await run('clickApplication',{tabId});
       assert.ok(opened.ok&&opened.frameId>0);
       const pdf=await PDFDocument.create();

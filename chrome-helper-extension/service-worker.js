@@ -1,18 +1,48 @@
 import { helperConfig } from './profile-config.js';
 const helperHeaders=extra=>({...extra,...(helperConfig.publicId?{'x-alex-job-extension-id':helperConfig.publicId,'x-alex-job-extension-token':helperConfig.token}:{})});
-async function ensureOffscreen() {
+let offscreenOperation;
+function ensureOffscreen(restart=false) {
+  if(offscreenOperation)return offscreenOperation;
+  offscreenOperation=configureOffscreen(restart).finally(()=>{offscreenOperation=null;});
+  return offscreenOperation;
+}
+async function configureOffscreen(restart) {
   const url=chrome.runtime.getURL('offscreen.html');
   const contexts=await chrome.runtime.getContexts({contextTypes:['OFFSCREEN_DOCUMENT'],documentUrls:[url]});
-  if(contexts.length) return;
+  if(contexts.length){
+    if(!restart)return;
+    await chrome.offscreen.closeDocument();
+  }
   await chrome.offscreen.createDocument({
     url:'offscreen.html',
     reasons:['DOM_SCRAPING'],
     justification:'Keep the local Alex Job command connection active while an approved application is prepared.'
   });
 }
-chrome.runtime.onInstalled.addListener(()=>ensureOffscreen());
-chrome.runtime.onStartup.addListener(()=>ensureOffscreen());
-ensureOffscreen();
+const startOffscreen=()=>{void ensureOffscreen().catch(()=>{});};
+chrome.runtime.onInstalled.addListener(startOffscreen);
+chrome.runtime.onStartup.addListener(startOffscreen);
+startOffscreen();
+
+async function bridgeConnected() {
+  const response=await fetch('http://127.0.0.1:8787/api/browser-helper/status',{
+    cache:'no-store',headers:helperHeaders({}),signal:AbortSignal.timeout(3000)
+  }).catch(()=>null);
+  if(!response) throw new Error('Cannot reach Alex Job on this computer. Open the dashboard and check that it is running.');
+  if(response.status===401||response.status===403) throw new Error('Alex Job did not accept this helper connection. Re-export the IT helper from your signed-in IT Profile.');
+  if(!response.ok) throw new Error('Alex Job could not check the helper connection.');
+  return Boolean((await response.json()).connected);
+}
+async function connectForRetry() {
+  await ensureOffscreen();
+  if(await bridgeConnected())return;
+  await ensureOffscreen(true);
+  for(let i=0;i<8;i++){
+    await new Promise(resolve=>setTimeout(resolve,300));
+    if(await bridgeConnected())return;
+  }
+  throw new Error('The IT helper could not reconnect to Alex Job. Reload the IT helper in chrome://extensions and try again.');
+}
 
 const retryStateKey='alexJobRetryState';
 const activeRetryStatuses=new Set(['starting','opening','scanning_advert','preparing_files','navigating_to_application','filling_form','retrying']);
@@ -47,9 +77,9 @@ async function startRetryFromPopup(input={}) {
   const current=await refreshRetryState();
   if(current?.tabId===tabId&&activeRetryStatuses.has(current.status)) return current;
   const bound=current?.tabId===tabId?current:null;
-  await ensureOffscreen();
   await saveRetryState({tabId,url:bound?.url||url,currentUrl:url,title:String(input.title||''),jobId:bound?.jobId||'',sessionId:bound?.sessionId||'',status:'starting',message:'Starting a fresh scan, fill and PDF upload…',startedAt:new Date().toISOString()});
   try {
+    await connectForRetry();
     const response=await fetch('http://127.0.0.1:8787/api/browser-helper/retry-current',{
       method:'POST',
       headers:helperHeaders({'content-type':'application/json'}),
