@@ -7,7 +7,7 @@ function textResult(text,structuredContent) {
 export function createChromeHelperClient(channel='default') {
   const send=(type,payload={},timeout=60000)=>sendChromeHelperCommand(type,payload,timeout,channel);
   async function start() {
-    const result=await send('ping',{},5000);
+    const result=await send('ping',{},12000);
     if(!result?.ok) throw new Error('The Alex Job Chrome helper did not answer');
     return true;
   }

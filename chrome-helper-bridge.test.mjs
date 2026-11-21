@@ -20,6 +20,20 @@ test('personal Chrome helpers use isolated command channels', async () => {
   assert.deepEqual(await pending,{ok:true});
 });
 
+test('a disconnected poll cannot swallow the next Chrome command',async()=>{
+  const channel='disconnected-fixture';
+  const cancelled=new AbortController();
+  const old=takeChromeHelperCommand(20000,channel,{signal:cancelled.signal});
+  cancelled.abort();
+  assert.equal(await old,null);
+  const received=takeChromeHelperCommand(200,channel);
+  const reply=sendChromeHelperCommand('ping',{},200,channel);
+  const command=await received;
+  assert.equal(command.type,'ping');
+  assert.equal(completeChromeHelperCommand({id:command.id,result:{ok:true}},channel),true);
+  assert.deepEqual(await reply,{ok:true});
+});
+
 test('Chrome helper searches embedded frames and clicks only the chosen application frame', async () => {
   const [source,agent,manifest]=await Promise.all([
     readFile(new URL('./chrome-helper-extension/service-worker.js',import.meta.url),'utf8'),

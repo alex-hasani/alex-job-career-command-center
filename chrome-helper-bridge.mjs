@@ -16,18 +16,24 @@ export function chromeHelperStatus(channel='default') {
   return { connected:available(state), lastSeenAt:state.lastSeenAt ? new Date(state.lastSeenAt).toISOString() : '' };
 }
 
-export function takeChromeHelperCommand(timeout=20000,channel='default') {
+export function takeChromeHelperCommand(timeout=20000,channel='default',{signal}={}) {
+  if(signal?.aborted)return Promise.resolve(null);
   const state=stateFor(channel);
   touch(state);
   if(state.queued.length) return Promise.resolve(state.queued.shift());
   return new Promise(resolve=>{
-    const timer=setTimeout(()=>{
-      const index=state.commandWaiters.findIndex(item=>item.resolve===resolve);
+    const finish=value=>{
+      clearTimeout(timer);
+      signal?.removeEventListener('abort',cancel);
+      const index=state.commandWaiters.findIndex(item=>item.resolve===finish);
       if(index>=0) state.commandWaiters.splice(index,1);
-      resolve(null);
-    },timeout);
+      resolve(value);
+    };
+    const cancel=()=>finish(null);
+    const timer=setTimeout(cancel,timeout);
     timer.unref?.();
-    state.commandWaiters.push({resolve,timer});
+    state.commandWaiters.push({resolve:finish,timer});
+    signal?.addEventListener('abort',cancel,{once:true});
   });
 }
 

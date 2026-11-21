@@ -1473,7 +1473,13 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ok:Boolean(result?.ok),version:result?.version||'',...chromeHelperStatus(helper.channel)}));
       }
       if(url.pathname==='/api/browser-helper/next'&&req.method==='GET') {
-        const command=await takeChromeHelperCommand(20000,helper.channel);
+        const poll=new AbortController();
+        const cancel=()=>poll.abort();
+        res.once('close',cancel);
+        let command;
+        try { command=await takeChromeHelperCommand(20000,helper.channel,{signal:poll.signal}); }
+        finally { res.off('close',cancel); }
+        if(res.destroyed)return;
         if(!command){res.writeHead(204,{'cache-control':'no-store'});return res.end();}
         res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
         return res.end(JSON.stringify(command));
@@ -1726,12 +1732,14 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {'content-type':types[extname(safePath)] || 'application/octet-stream','cache-control':cacheControl}); res.end(file);
   } catch (error) {
     logActivity({ level:'error', action:req.method + ' ' + url.pathname, result:'failed', detail:error.message });
-    const status = ['NEEDS_JOB_DESCRIPTION','STALE_CLIENT'].includes(error.code) ? 409 : (url.pathname.startsWith('/api/') ? 500 : 404);
+    const helperUnavailable=url.pathname==='/api/browser-helper/retry-current'&&
+      /^The normal-profile Chrome helper is not connected\./.test(error.message);
+    const status = helperUnavailable?503:['NEEDS_JOB_DESCRIPTION','STALE_CLIENT'].includes(error.code) ? 409 : (url.pathname.startsWith('/api/') ? 500 : 404);
     res.writeHead(status, {'content-type':'application/json','cache-control':'no-store'});
     const pdfDownloadFailed = url.pathname === '/api/application-package/download' && url.searchParams.get('format') === 'pdf';
     res.end(JSON.stringify({
-      error:pdfDownloadFailed ? 'The PDF could not be created. Please try again; the Word version remains available.' : error.message,
-      code:pdfDownloadFailed ? 'PDF_EXPORT_FAILED' : (error.code || ''),
+      error:pdfDownloadFailed ? 'The PDF could not be created. Please try again; the Word version remains available.' : helperUnavailable?'Chrome did not answer Alex Job in time. Keep this Chrome profile open and try again. No application was started.':error.message,
+      code:pdfDownloadFailed ? 'PDF_EXPORT_FAILED' : helperUnavailable?'CHROME_HELPER_UNAVAILABLE':(error.code || ''),
       details:pdfDownloadFailed ? null : (error.details || null)
     }));
   }
