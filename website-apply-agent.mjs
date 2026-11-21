@@ -20,6 +20,39 @@ function deepElements(selector) {
   visit(document);
   return [...new Set(found)];
 }
+// Runs in the selected tab. Only an unambiguous, visible application form on
+// the original posting's origin gets early contact autofill.
+function fillApplicationContactPreview(origin,values,fieldKindForHint) {
+  if(location.origin!==origin) return {found:false,filled:0};
+  const visible=input=>Boolean(input.getClientRects().length&&getComputedStyle(input).visibility==='visible');
+  const contactKinds=new Set(['firstName','lastName','email','phone']);
+  const matched=[];
+  for(const form of document.forms){
+    const controls=[...form.elements].filter(input=>input instanceof HTMLInputElement&&input.form===form&&visible(input));
+    if(!controls.some(input=>input.type==='file'&&!input.disabled)||controls.some(input=>input.type==='password'))continue;
+    const fields=new Map();
+    for(const input of controls){
+      if(!['text','email','tel'].includes(input.type)||input.disabled||input.readOnly)continue;
+      const hint=[...Array.from(input.labels||[],label=>label.textContent),input.name,input.id,input.placeholder,input.getAttribute('aria-label'),input.autocomplete].filter(Boolean).join(' ');
+      const kind=fieldKindForHint(hint);
+      if(!contactKinds.has(kind))continue;
+      if(fields.has(kind)){fields.set(kind,null);continue;}
+      fields.set(kind,input);
+    }
+    if(fields.get('firstName')&&fields.get('lastName')&&fields.get('email'))matched.push(fields);
+  }
+  if(matched.length!==1)return {found:false,filled:0};
+  let filled=0;
+  for(const [kind,input] of matched[0]){
+    const value=values[kind];
+    if(!input||!value||input.value.trim())continue;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+    input.dispatchEvent(new Event('input',{bubbles:true,composed:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+    filled++;
+  }
+  return {found:true,filled};
+}
 export function fieldKindForHint(value='') {
   const hint=normal(value);
   if(/legal.?first.?name|legal.?given.?name|amtlich(?:er|e).?vorname|rechtlich(?:er|e).?vorname/.test(hint)) return 'legalFirstName';
@@ -353,8 +386,40 @@ export function createWebsiteApplyAgent({ workspace, coverLetters, profile, onEv
     const combined=parts.join(' ').slice(0,60000);
     return {...result,text:combined,source:'exact posting rendered in Google Chrome, including embedded frames',retrievedAt:new Date().toISOString(),complete:combined.length>=900}; });
   }
-  async function prepareVisibleForm(jobId) { return busy(async()=>{ const session=sessions.get(jobId); if(!session||!await pageExists(session.pageId)) throw new Error('The Google Chrome application tab is no longer open'); return navigateToApplication(session); }); }
-  function fail(jobId,error) { const session=sessions.get(jobId); if(session) { clearInterval(session.timer); return set(session,'failed',`Website application preparation failed: ${error.message}`); } }
+  async function prepareVisibleForm(jobId) {
+    return busy(async()=>{
+      const session=sessions.get(jobId);
+      if(!session||!await pageExists(session.pageId))throw new Error('The Google Chrome application tab is no longer open');
+      const form=profile.applicationForm||{}, identity=profile.identity||{};
+      const values={firstName:form.firstName,lastName:form.lastName,email:identity.email,phone:form.phoneInternational||identity.phone};
+      const origin=new URL(session.originUrl).origin;
+      const code=`()=>{const normal=${normal.toString()};return (${fillApplicationContactPreview.toString()})(${JSON.stringify(origin)},${JSON.stringify(values)},${fieldKindForHint.toString()});}`;
+      const prefill=async()=>{
+        const state=await snapshot(session.pageId);
+        if(state.captcha){
+          set(session,'waiting_for_login','Complete the CAPTCHA in Google Chrome. No form fields or files were changed.');
+          return true;
+        }
+        const result=await chrome.evaluate(session.pageId,code);
+        if(!result?.found)return false;
+        session.previewContactCount=(session.previewContactCount||0)+result.filled;
+        set(session,'preparing_files','Application form found. Checking the documents before attaching any files.');
+        return true;
+      };
+      if(await prefill())return true;
+      const opened=await navigateToApplication(session);
+      if(opened)await prefill();
+      return opened;
+    });
+  }
+  function fail(jobId,error) {
+    const session=sessions.get(jobId);
+    if(session) {
+      clearInterval(session.timer);
+      const preview=session.previewContactCount&&!session.files?' Contact fields were filled. No files were attached; nothing was submitted.':'';
+      return set(session,'failed',`Website application preparation failed: ${error.message}${preview}`);
+    }
+  }
   async function confirmSubmit(jobId) {
     return busy(async()=>{ const session=sessions.get(jobId); if(!session||session.status!=='ready_for_final_confirmation') throw new Error('The browser agent is not waiting at final submission');
     const marked=await chrome.evaluate(session.pageId,`()=>{const control=[...document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"]')].find(el=>/\\b(?:submit|send application|submit application|application abschicken|bewerbung absenden|bewerbung einreichen|jetzt verbindlich bewerben|envoyer (?:la )?candidature|invia(?:re)? (?:la )?candidatura|enviar (?:la )?(?:solicitud|candidatura))\\b/i.test((el.innerText||el.textContent||el.value||el.getAttribute('aria-label')||'').trim())&&!el.disabled&&(el.offsetWidth||el.offsetHeight||el.getClientRects().length));if(!control)return false;control.setAttribute('aria-label','alex-final-submit-target');return true}`); if(!marked) throw new Error('The final submit control is no longer available. Review Google Chrome, then resume the agent.');
