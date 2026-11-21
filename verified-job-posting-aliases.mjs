@@ -4,6 +4,9 @@ function postingKey(value) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password) return '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^utm_/i.test(key)) url.searchParams.delete(key);
+    }
     const path = url.pathname.replace(/%28/gi, '(').replace(/%29/gi, ')').replace(/\/$/, '');
     return path ? url.origin + path + url.search : '';
   } catch { return ''; }

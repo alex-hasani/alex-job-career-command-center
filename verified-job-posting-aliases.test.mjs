@@ -7,7 +7,7 @@ const en = 'https://careers.example.com/EN/Engineer/101';
 const other = 'https://careers.example.com/EN/Engineer/111';
 const aliases = compileVerifiedPostingAliases([[de, en]]);
 const jobs = [
-  { id:'en', url:en, title:'Engineer', company:'Example', active:true },
+  { id:'en', url:en + '/?utm_source=provider.example', title:'Engineer', company:'Example', active:true },
   { id:'de', url:de.replace('(', '%28').replace(')', '%29') + '/', title:'Engineer', company:'Example', active:true },
   { id:'other', url:other, title:'Engineer', company:'Example', applicationStatus:'Case Closed', active:false }
 ];
