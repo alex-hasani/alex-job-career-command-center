@@ -15,6 +15,7 @@ export const WRITING_POLICY = {
 };
 const LANGUAGES=['de','en'];
 const TYPES=['cv','coverLetter','remarks'];
+const POSITION_SLOT='[[EXACT_ADVERTISED_POSITION]]';
 const schema = properties => ({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const draftSchema=schema({documents:{type:'array',items:schema({id:{type:'string'},body:{type:'string'}})}});
 const reviewSchema=schema({approved:{type:'boolean'},findings:{type:'array',items:{type:'string'}}});
@@ -83,9 +84,15 @@ function applyDraft(documents,result,job) {
   for(const original of before){
     const item=items.find(item=>item.id===original.id);
     if(typeof item?.body!=='string'||item.body.length<20||item.body.length>(original.id.startsWith('cv.')?30000:12000))fail('Codex returned an invalid document.');
-    for(const line of protectedLines(original))if(line.trim()&&!item.body.includes(line))fail('Codex changed a protected CV detail. No final files were released.');
-    if(original.id.startsWith('coverLetter.')&&!item.body.includes(job.title))fail('Codex changed or omitted the exact advertised position name.');
-    const [type,language]=original.id.split('.');next[type][language].body=item.body;
+    let body=item.body;
+    const coverLetter=original.id.startsWith('coverLetter.');
+    if(body.includes(POSITION_SLOT)){
+      if(!coverLetter||body.split(POSITION_SLOT).length!==2)fail('Codex used the exact position placeholder incorrectly.');
+      body=body.replace(POSITION_SLOT,()=>job.title);
+    }
+    for(const line of protectedLines(original))if(line.trim()&&!body.includes(line))fail('Codex changed a protected CV detail. No final files were released.');
+    if(coverLetter&&!body.includes(job.title))fail('Codex changed or omitted the exact advertised position name.');
+    const [type,language]=original.id.split('.');next[type][language].body=body;
   }
   return next;
 }
@@ -93,6 +100,7 @@ function applyDraft(documents,result,job) {
 export function createApplicationWritingReviewer({agent=runLocalCodex,workspace}={}) {
   return async function reviewApplication({job,posting,documents,evidence,tailor=true,rewriteTypes=TYPES}) {
     if(!job?.title||!posting?.text||!evidence)fail('The posting and career evidence are required for Codex review.');
+    if(job.title.includes(POSITION_SLOT))fail('The advertised position contains a reserved placeholder.');
     const currentUserConfirmedFacts=await readCurrentCandidateFacts(workspace);
     documents=structuredClone(documents);
     for(const type of TYPES)for(const language of LANGUAGES)if(documents[type]?.[language])documents[type][language].body=applyCurrentCandidateFacts(documents[type][language].body,currentUserConfirmedFacts);
@@ -102,7 +110,9 @@ export function createApplicationWritingReviewer({agent=runLocalCodex,workspace}
     let next=structuredClone(documents),findings=[],rounds=0;
     for(let attempt=0;attempt<(tailor?2:1);attempt++){
       if(tailor){
-        const draft=await agent({outputSchema:draftSchema,prompt:`${boundary}\nYou are the application writer. Rewrite only editableDocumentIds in the candidate's professional voice while fully tailoring them to this advertisement; return other documents byte-for-byte unchanged. Preserve protected CV lines EXACTLY, all factual claims and the exact advertised position name. Keep CV section structure, language and readable length. Return all document IDs exactly once. Do not include cover-letter subject/date/header in its body unless already present. Repair these prior review findings: ${JSON.stringify(findings)}\nINPUT\n${JSON.stringify({...context,currentDocuments:writingDocuments(next)})}`});
+        const currentDocuments=writingDocuments(next).map(item=>item.id.startsWith('coverLetter.')&&context.editableDocumentIds.includes(item.id)
+          ? {...item,body:item.body.replace(job.title,()=>POSITION_SLOT)}:item);
+        const draft=await agent({outputSchema:draftSchema,prompt:`${boundary}\nYou are the application writer. Rewrite only editableDocumentIds in the candidate's professional voice while fully tailoring them to this advertisement; return other documents byte-for-byte unchanged. Preserve protected CV lines EXACTLY and keep all factual claims. In each editable cover letter, use ${POSITION_SLOT} exactly once in the opening paragraph where the advertised role belongs. The app supplies the exact title in place of that placeholder before review; do not translate, retype, or add another title. Do not use the placeholder in any other document. Keep CV section structure, language and readable length. Return all document IDs exactly once. Do not include cover-letter subject/date/header in its body unless already present. Repair these prior review findings: ${JSON.stringify(findings)}\nINPUT\n${JSON.stringify({...context,currentDocuments})}`});
         try {
           const candidate=applyDraft(documents,draft,job);
           for(const item of writingDocuments(candidate))if(!context.editableDocumentIds.includes(item.id)&&item.body!==original.find(before=>before.id===item.id).body)fail('Codex changed a document outside the requested regeneration scope.');

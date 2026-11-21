@@ -6,6 +6,7 @@ const job={id:'fixture:1',title:'Infrastructure Engineer (m/w/d)',company:'Examp
 const posting={text:'Windows and Linux administration, incident response and practical automation.'};
 const documents={cv:{en:{body:'Example Candidate\nInfrastructure Engineer\nExample City\nContact withheld\nEXPERIENCE\nAdministrator | Example Employer | 2020-2024\n• Supported Windows and Linux servers.'}},coverLetter:{en:{body:`Dear Hiring Team,\n\nThe ${job.title} role involves the systems I work with. I support Windows and Linux servers and resolve incidents.\n\nKind regards`}},remarks:{en:{body:'I support Windows and Linux infrastructure.'}}};
 const evidence={facts:['Supported Windows and Linux servers, 2020-2024.']};
+const positionSlot='[[EXACT_ADVERTISED_POSITION]]';
 const input=prompt=>JSON.parse(prompt.split('\nINPUT\n')[1]);
 export const acceptingAgent=async({prompt,outputSchema})=>outputSchema.properties.documents?{documents:input(prompt).currentDocuments}:{approved:true,findings:[]};
 
@@ -39,7 +40,7 @@ test('rejected, missing or failed review never produces approval',async()=>{
   assert.equal(hasCurrentWritingReview(job,documents,null),false);
 });
 test('writer cannot change protected history, position name or regeneration scope',async()=>{
-  for(const [id,replace] of [['cv.en',s=>s.replace('2020-2024','2010-2024')],['coverLetter.en',s=>s.replace(job.title,'Different Role')],['cv.en',s=>s+' Extra text']]){
+  for(const [id,replace] of [['cv.en',s=>s.replace('2020-2024','2010-2024')],['coverLetter.en',s=>s.replace(positionSlot,'Different Role')],['cv.en',s=>s+' Extra text']]){
     const reviewer=createApplicationWritingReviewer({agent:async request=>{const result=await acceptingAgent(request);if(result.documents)result.documents.find(x=>x.id===id).body=replace(result.documents.find(x=>x.id===id).body);return result;}});
     await assert.rejects(reviewer({job,posting,documents,evidence,rewriteTypes:['coverLetter']}),/protected|position|scope/);
   }
@@ -47,7 +48,7 @@ test('writer cannot change protected history, position name or regeneration scop
 test('a rejected rewrite gets one clean repair before independent review',async()=>{
   for(const [id,mutate,finding] of [
     ['cv.en',body=>body.replace('2020-2024','2010-2024'),/protected CV detail/],
-    ['coverLetter.en',body=>body.replace(job.title,'Different Role'),/exact advertised position name/]
+    ['coverLetter.en',body=>body.replace(positionSlot,'Different Role'),/exact advertised position name/]
   ]){
     let writes=0,reviews=0;
     const reviewer=createApplicationWritingReviewer({agent:async request=>{
@@ -62,7 +63,7 @@ test('a rejected rewrite gets one clean repair before independent review',async(
         item.body=mutate(item.body);
       }else{
         assert.match(request.prompt,finding);
-        assert.deepEqual(draft,input(request.prompt).originalDocuments);
+        assert.deepEqual(draft.map(item=>({...item,body:item.body.replace(positionSlot,()=>job.title)})),input(request.prompt).originalDocuments);
       }
       return {documents:draft};
     }});
@@ -71,6 +72,29 @@ test('a rejected rewrite gets one clean repair before independent review',async(
     assert.equal(reviews,1);
     assert.equal(hasCurrentWritingReview(job,result.documents,result.review),true);
   }
+});
+test('the app inserts the exact title in both languages before review, never the placeholder',async()=>{
+  const advertised={...job,title:'Senior Cloud Operations Engineer (m/f/d)'};
+  const bilingual=structuredClone(documents);
+  bilingual.coverLetter.en.body=bilingual.coverLetter.en.body.replace(job.title,advertised.title);
+  bilingual.coverLetter.de={body:`Sehr geehrtes Team,\n\nFür die Position ${advertised.title} bringe ich Erfahrung im Windows- und Linux-Betrieb mit.`};
+  const reviewer=createApplicationWritingReviewer({agent:async request=>{
+    const data=input(request.prompt);
+    if(request.outputSchema.properties.documents){
+      for(const doc of data.currentDocuments.filter(doc=>doc.id.startsWith('coverLetter.'))){
+        assert.ok(doc.body.includes(positionSlot));
+        assert.ok(!doc.body.includes(advertised.title));
+      }
+      return {documents:data.currentDocuments};
+    }
+    for(const doc of data.documents.filter(doc=>doc.id.startsWith('coverLetter.'))){
+      assert.ok(doc.body.includes(advertised.title));
+      assert.ok(!doc.body.includes(positionSlot));
+    }
+    return {approved:true,findings:[]};
+  }});
+  const result=await reviewer({job:advertised,posting,documents:bilingual,evidence});
+  assert.deepEqual(result.documents,bilingual);
 });
 test('manual edits receive review only and are never silently rewritten',async()=>{
   let calls=0;
