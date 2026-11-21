@@ -19,6 +19,7 @@ import { buildGmailReconciliationPrompt, gmailReconciliationCheckpoint } from '.
 import { isTechnicalRole } from './job-role-scope.mjs';
 import { createUserSpaceRouter } from './user-space.mjs';
 import { buildSourceSearchUrls } from './source-search-urls.mjs';
+import { groupVerifiedPostingAliases, loadVerifiedPostingAliases } from './verified-job-posting-aliases.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -35,6 +36,8 @@ const statePath = join(workspace, 'State', 'cv_command_center_state.json');
 const databaseBackupScript = join(root, 'backup-databases.mjs');
 const liveDatabasePath = join(workspace, 'State', 'live_job_database.json');
 const sqlitePath = join(workspace, 'State', 'job_search.sqlite');
+const verifiedPostingAliases = loadVerifiedPostingAliases(join(workspace, 'State', 'verified-job-posting-aliases.json'),
+  error => console.error('Verified IT posting aliases not loaded:', error.message));
 const emailReconciliationRequestPath = join(workspace, 'State', 'gmail_reconciliation_request.json');
 const activityLogPath = join(workspace, 'State', 'app-activity-log.jsonl');
 const logActivity = event => appendActivityEvent(activityLogPath, event).catch(error => console.error('Activity log failure:', error.message));
@@ -1192,7 +1195,7 @@ async function search(params, onProgress = () => {}, refreshId = randomUUID(), s
   await writeFile(liveDatabasePath, JSON.stringify(data, null, 2), 'utf8');
   onProgress({ progress:94, phase:'Finalising SQLite results', completedSources, totalSources });
   onProgress({ progress:100, phase:'Database and website results ready', completedSources, totalSources });
-  return data;
+  return { ...data, jobs:groupVerifiedPostingAliases(data.jobs, verifiedPostingAliases) };
 }
 async function loadDatabase(params) {
   // SQLite is the source of truth. Keep this repair bounded so dashboard load
@@ -1205,7 +1208,8 @@ async function loadDatabase(params) {
   // Filters run instantly in the browser, so every canonical SQLite record
   // must reach the client. Truncating this list before location filtering made
   // cities outside the dominant Stuttgart dataset appear almost empty.
-  const jobs = jobDb.listJobs({ includeInactive:true }).map(assessJob).filter(isTechnicalRole).sort((a,b) => a.origin === 'agent' && b.origin !== 'agent' ? -1 : b.origin === 'agent' && a.origin !== 'agent' ? 1 : b.match-a.match);
+  const jobs = groupVerifiedPostingAliases(jobDb.listJobs({ includeInactive:true }).map(assessJob).filter(isTechnicalRole), verifiedPostingAliases)
+    .sort((a,b) => a.origin === 'agent' && b.origin !== 'agent' ? -1 : b.origin === 'agent' && a.origin !== 'agent' ? 1 : b.match-a.match);
   const savedSearches = jobDb.listSavedSearches();
   let activeSavedSearchId = jobDb.getMetadata('active_saved_search_id')?.value || '';
   if (!savedSearches.some(search => search.id === activeSavedSearchId)) {
